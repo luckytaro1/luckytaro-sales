@@ -1,40 +1,33 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Lucky Taro, Inc.</title><link rel="icon" type="image/png" href="favicon.png"><link rel="apple-touch-icon" href="apple-touch-icon.png"><meta name="theme-color" content="#2a1440"><meta name="robots" content="noindex,nofollow">
+<title>Lucky Taro, Inc.</title><link rel="icon" type="image/png" href="favicon.png"><link rel="apple-touch-icon" href="apple-touch-icon.png"><meta name="theme-color" content="#faf7f2"><meta name="robots" content="noindex,nofollow">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-:root{color-scheme:dark;--taro:#8a5ea8;--taro2:#c4a3dd;--mango:#8dc63f;--leaf:#22c55e;--ink:#0f0b1e;--fg:#f4f2ff;--mut:#b4acd4}
-*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:var(--ink);color:var(--fg);font:15px/1.5 "Plus Jakarta Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-.lp{min-height:100vh;display:grid;grid-template-columns:1.1fr 1fr}
-.hero{position:relative;overflow:hidden;padding:56px max(32px,env(safe-area-inset-left));display:flex;flex-direction:column;justify-content:center;gap:22px;
-  background:radial-gradient(900px 500px at 10% 0%,#6b3f8f 0%,transparent 60%),radial-gradient(700px 500px at 100% 100%,#3f6b1c 0%,transparent 55%),linear-gradient(160deg,#3a1d55,#1f1230 55%,#1d2a12)}
-.hero .brand{display:flex;align-items:center;gap:12px;font-weight:800;font-size:20px;letter-spacing:.2px}
-.hero .brand{flex-direction:column;align-items:flex-start;gap:10px}.hero .brand .logo{display:block;line-height:0}.hero .brand .logo img{height:110px;width:auto;filter:drop-shadow(1.5px 0 0 #fff) drop-shadow(-1.5px 0 0 #fff) drop-shadow(0 1.5px 0 #fff) drop-shadow(0 -1.5px 0 #fff) drop-shadow(0 6px 16px rgba(0,0,0,.35))}.hero .brand span.co{font-size:15px;font-weight:700;color:var(--mut);letter-spacing:.3px}
-.hero h1{font-size:clamp(30px,4vw,48px);line-height:1.08;margin:0;font-weight:800;max-width:14ch;text-wrap:balance}
-.hero h1 em{font-style:normal;background:linear-gradient(90deg,#8dc63f,#d9f99d);-webkit-background-clip:text;background-clip:text;color:transparent}
-.hero p.lead{color:var(--mut);font-size:17px;margin:0;max-width:40ch}
-.feats{display:grid;gap:12px;margin-top:6px;max-width:440px}
-.feat{display:flex;gap:12px;align-items:center;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:12px 14px;backdrop-filter:blur(4px)}
-.feat i{font-style:normal;width:38px;height:38px;border-radius:11px;display:grid;place-items:center;font-size:19px;flex:none}
-.feat b{display:block;font-size:15px}.feat small{color:var(--mut);font-size:13px}
-.f1 i{background:rgba(34,197,94,.18)}.f2 i{background:rgba(141,198,63,.2)}.f3 i{background:rgba(167,139,250,.22)}
-.blob{position:absolute;border-radius:50%;filter:blur(2px);opacity:.9;pointer-events:none;z-index:0}.hero>*:not(.blob){position:relative;z-index:1}
-.side{display:flex;align-items:center;justify-content:center;padding:40px max(20px,env(safe-area-inset-right)) 40px max(20px,env(safe-area-inset-left));background:#140f26}
-.login{width:100%;max-width:400px;display:flex;flex-direction:column;gap:14px}
-.login h2{margin:0;font-size:26px;font-weight:800}.login .sub{margin:-8px 0 6px;color:var(--mut)}
-.login label{color:var(--mut);display:flex;flex-direction:column;gap:6px;font-size:13.5px;font-weight:600}
-.field{background:#1d1736;border:1.5px solid #3b3263;border-radius:12px;padding:13px 14px;outline:none;color:var(--fg);font:inherit;font-size:16px;transition:border-color .15s,box-shadow .15s}
-.field:focus{border-color:var(--taro2);box-shadow:0 0 0 4px rgba(167,139,250,.18)}
-.pwrap{position:relative}.pwrap .field{width:100%;padding-right:64px}.pwrap button{all:unset;cursor:pointer;position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--taro2);font-size:13px;font-weight:700}
-.btn{cursor:pointer;border:0;border-radius:12px;padding:14px;font:inherit;font-weight:800;font-size:16px;color:#13210a;background:linear-gradient(90deg,#8dc63f,#a3d65c);box-shadow:0 10px 24px rgba(141,198,63,.25);transition:transform .1s,filter .15s}
-.btn:hover{filter:brightness(1.05)}.btn:active{transform:translateY(1px)}.btn[disabled]{opacity:.7;cursor:default}
-.chk{flex-direction:row!important;align-items:center;gap:10px!important;font-weight:500!important}.chk input{width:18px;height:18px;accent-color:var(--taro)}
-.err{background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.35);color:#fecaca;border-radius:10px;padding:10px 12px;font-size:14px}
-.help{color:var(--mut);font-size:13px;text-align:center;margin-top:4px}.lock{color:var(--mut);font-size:12.5px;display:flex;gap:6px;justify-content:center;align-items:center}
-.red{color:#f87171}.mut{color:var(--mut)}.row{display:flex;gap:8px;align-items:center}
-@media (max-width:860px){.lp{grid-template-columns:1fr}.hero{padding:34px 20px 30px;gap:14px}.hero h1{font-size:30px}.hero .brand .logo img{height:76px}.hero p.lead{font-size:15px}.feats{display:none}.blob{opacity:.35;transform:scale(.7)}.side{padding:26px 20px 40px;align-items:flex-start}}
-</style></head><body><div id="app"><p class="mut" style="text-align:center;margin-top:40vh">Opening…</p></div>
+:root{color-scheme:light;--purple:#7b4fa0;--purple2:#5e3a7e;--green:#7cb82f;--green2:#5f9420;--ink:#2b2236;--mut:#7a7187;--line:#e6e0ec;--bg:#faf7f2;--card:#ffffff}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:var(--bg);color:var(--ink);font:15px/1.5 "Plus Jakarta Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+.lp{position:relative;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:40px max(18px,env(safe-area-inset-right)) 40px max(18px,env(safe-area-inset-left));overflow:hidden}
+.lp::before,.lp::after{content:"";position:absolute;border-radius:50%;filter:blur(60px);opacity:.55;pointer-events:none}
+.lp::before{width:520px;height:520px;left:-160px;top:-180px;background:radial-gradient(circle,#d9c6ea,transparent 70%)}
+.lp::after{width:560px;height:560px;right:-200px;bottom:-220px;background:radial-gradient(circle,#d6ecb8,transparent 70%)}
+.wrap{position:relative;z-index:1;width:100%;max-width:420px;display:flex;flex-direction:column;align-items:center;gap:18px}
+.logo{display:block;width:min(200px,56vw);height:auto}
+.tag{margin:-10px 0 0;color:var(--mut);font-weight:600;letter-spacing:.4px;font-size:13px;text-transform:uppercase}
+.login{width:100%;background:var(--card);border:1px solid var(--line);border-radius:22px;padding:28px 26px 24px;box-shadow:0 1px 2px rgba(43,34,54,.04),0 20px 50px -18px rgba(94,58,126,.28);display:flex;flex-direction:column;gap:16px}
+.login h2{margin:0;font-size:24px;font-weight:800;letter-spacing:-.2px}.login .sub{margin:-10px 0 2px;color:var(--mut);font-size:14.5px}
+.login label{color:var(--ink);display:flex;flex-direction:column;gap:7px;font-size:13.5px;font-weight:700}
+.field{width:100%;background:#fbfafc;border:1.5px solid var(--line);border-radius:12px;padding:13px 14px;outline:none;color:var(--ink);font:inherit;font-size:16px;font-weight:500;transition:border-color .15s,box-shadow .15s,background .15s}
+.field:focus{border-color:var(--purple);background:#fff;box-shadow:0 0 0 4px rgba(123,79,160,.14)}
+.pwrap{position:relative}.pwrap .field{padding-right:66px}.pwrap button{all:unset;cursor:pointer;position:absolute;right:14px;top:50%;transform:translateY(-50%);color:var(--purple);font-size:13px;font-weight:700}
+.btn{cursor:pointer;border:0;border-radius:12px;padding:14px;font:inherit;font-weight:800;font-size:16px;color:#fff;background:linear-gradient(180deg,var(--purple),var(--purple2));box-shadow:0 10px 22px -10px rgba(94,58,126,.7);transition:transform .1s,filter .15s;margin-top:4px}
+.btn:hover{filter:brightness(1.07)}.btn:active{transform:translateY(1px)}.btn[disabled]{opacity:.75;cursor:default}
+.err{background:#fdf0f0;border:1px solid #f4c7c7;color:#a12c2c;border-radius:10px;padding:10px 12px;font-size:14px;font-weight:600}
+.lock{color:var(--mut);font-size:12.5px;text-align:center}
+.feats{display:flex;flex-wrap:wrap;justify-content:center;gap:8px}.feats span{background:rgba(255,255,255,.7);border:1px solid var(--line);border-radius:99px;padding:6px 12px;font-size:13px;font-weight:600;color:#4b4258}
+.feats b{color:var(--green2)}
+.foot{color:var(--mut);font-size:12.5px;text-align:center}
+.mut{color:var(--mut)}.red{color:#a12c2c}.row{display:flex;gap:8px;align-items:center}.side{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}
+</style></head><body><div id="app"><p class="mut" style="text-align:center;margin-top:40vh;color:#7a7187">Opening…</p></div>
 <script>
 (() => { "use strict";
 const ORDER_EMAIL = "purchase@luckytaro.com";
@@ -50,19 +43,15 @@ async function unlock(code, pw){ code = code.trim().toUpperCase(); const f = (aw
   const key = await crypto.subtle.deriveKey({ name: "PBKDF2", salt: b64(E.salt), iterations: E.it, hash: "SHA-256" }, km, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
   let raw; try { raw = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b64(E.iv) }, key, b64(E.ct)); } catch(e){ throw new Error("pw"); }
   return JSON.parse(await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream("gzip"))).text()); }
-function loginView(err, code0){ document.getElementById("app").innerHTML = `<div class="lp">
-  <section class="hero"><span class="blob" style="width:220px;height:220px;right:-60px;top:-60px;background:radial-gradient(circle at 35% 35%,#d8b4fe,#8a5ea8 60%,transparent 70%)"></span><span class="blob" style="width:160px;height:160px;right:12%;bottom:-50px;background:radial-gradient(circle at 35% 35%,#d9f99d,#8dc63f 60%,transparent 70%)"></span>
-    <div class="brand"><span class="logo"><img src="logo.png" alt="Lucky Taro"></span><span class="co">Lucky Taro, Inc.</span></div>
-    <h1>Fresh prices.<br><em>Faster sales.</em></h1>
-    <p class="lead">Today's price list, stock and every one of your customers ─ in your pocket, wherever you are.</p>
-    <div class="feats"><div class="feat f1"><i>📦</i><span><b>Live stock & prices</b><small>What's in, what's coming, what to push</small></span></div>
-      <div class="feat f2"><i>💲</i><span><b>Quotes in seconds</b><small>Their prices, sent by WhatsApp or email</small></span></div>
-      <div class="feat f3"><i>🧾</i><span><b>Orders straight to the office</b><small>Pick the items, set the cases, send</small></span></div></div></section>
-  <section class="side"><form class="login" id="lf" autocomplete="on"><h2>Welcome back 👋</h2><p class="sub">Sign in to your sales desk</p>
-    <label>Username<input class="field" id="lc" autocomplete="username" autocapitalize="characters" spellcheck="false" value="${esc(code0 || "")}"></label>
-    <label>Password<span class="pwrap"><input class="field" id="lp" type="password" autocomplete="current-password" placeholder="Your password"><button type="button" id="lpShow">Show</button></span></label>
-    ${err ? `<div class="err">${esc(err)}</div>` : ""}<button class="btn" type="submit">Sign in →</button>
-    <div class="lock">🔒 Your data is locked with your own password</div><div class="help">Forgot your password? Ask the office for a new one.</div></form></section></div>`;
+function loginView(err, code0){ document.getElementById("app").innerHTML = `<div class="lp"><div class="wrap">
+    <img class="logo" src="logo.png" alt="Lucky Taro"><p class="tag">Sales desk</p>
+    <form class="login" id="lf" autocomplete="on"><h2>Welcome back</h2><p class="sub">Sign in to see today's prices, stock and your customers.</p>
+      <label>Username<input class="field" id="lc" autocomplete="username" autocapitalize="characters" spellcheck="false" value="${esc(code0 || "")}"></label>
+      <label>Password<span class="pwrap"><input class="field" id="lp" type="password" autocomplete="current-password"><button type="button" id="lpShow">Show</button></span></label>
+      ${err ? `<div class="err">${esc(err)}</div>` : ""}<button class="btn" type="submit">Sign in</button>
+      <div class="lock">🔒 Your data is locked with your own password · forgot it? ask the office</div></form>
+    <div class="feats"><span><b>●</b> Live stock & prices</span><span><b>●</b> Quotes in seconds</span><span><b>●</b> Orders to the office</span></div>
+    <div class="foot">© Lucky Taro, Inc. · Los Angeles</div></div></div>`;
   const pi = document.getElementById("lp"), sb = document.getElementById("lpShow"); sb.onclick = () => { pi.type = pi.type === "password" ? "text" : "password"; sb.textContent = pi.type === "password" ? "Show" : "Hide"; pi.focus(); };
   (document.getElementById("lc").value ? pi : document.getElementById("lc")).focus();
   document.getElementById("lf").onsubmit = async e => { e.preventDefault(); const c = document.getElementById("lc").value, p = document.getElementById("lp").value; if (!c || !p) return; const sbtn = e.target.querySelector(".btn"); sbtn.textContent = "Opening your desk…"; sbtn.disabled = true;
@@ -86,7 +75,8 @@ function boot(P){ const code = P.meta.code, TK = "lt-team-" + code, SK = "lt-sen
     onSnapshot: cb => { (L.get("c:" + path) || L.set("c:" + path, []).get("c:" + path)).push(cb); setTimeout(() => cb(kids(path)), 0); return () => {}; }, doc: id => doc(path + "/" + (id || Math.random().toString(36).slice(2))), add: async v => { const d = doc(path + "/" + Math.random().toString(36).slice(2)); await d.set(v); return d; } }; return q; };
   const db = { doc, collection: coll, batch: () => { const ops = []; return { set: (d, v, o) => ops.push(() => d.set(v, o)), update: (d, v) => ops.push(() => d.update(v)), delete: d => ops.push(() => d.delete()), commit: async () => { for (const f of ops) await f(); } }; }, runTransaction: async f => f({ get: d => d.get(), set: (d, v) => d.set(v), update: (d, v) => d.update(v) }) };
   const user = { isOwner: async () => false, canEdit: async () => false, can: async n => n === "data.write", id: async () => "U", me: async () => ({ id: "U", name: P.meta.name || code }), profiles: async () => ({}), search: async () => [] };
-  window.claude = { use: async n => n === "db" ? db : n === "user" ? user : null };
+  const downloads = { save: async ({ filename, data }) => { const u = URL.createObjectURL(data instanceof Blob ? data : new Blob([data], { type: /\.csv$/i.test(filename) ? "text/csv" : "application/octet-stream" })); const a = document.createElement("a"); a.href = u; a.download = filename; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(u); a.remove(); }, 2000); return true; } };
+  window.__ltWeb = true; window.claude = { use: async n => n === "db" ? db : n === "user" ? user : n === "downloads" ? downloads : null };
   // sales orders go to the office by email (there's no live link back to the desk from here)
   const custName = id => { for (const k in docs){ if (!/\/cust\d+$/.test(k)) continue; const c = (docs[k].list || []).find(x => x.id === id); if (c) return [c.name, c.code]; } return [id, ""]; };
   const pending = () => { let sent = {}; try { sent = JSON.parse(store.get(SK) || "{}"); } catch(e){} return ((docs["team/U"] || {}).soOut || []).filter(so => so && !so.void && (so.lines || []).some(l => Number(l.q) > 0) && sent[so.uid] !== so.at); };
