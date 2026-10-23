@@ -59,15 +59,14 @@ function loginView(err, code0){ document.getElementById("app").innerHTML = `<div
       <div class="feat f2"><i>💲</i><span><b>Quotes in seconds</b><small>Their prices, sent by WhatsApp or email</small></span></div>
       <div class="feat f3"><i>🧾</i><span><b>Orders straight to the office</b><small>Pick the items, set the cases, send</small></span></div></div></section>
   <section class="side"><form class="login" id="lf" autocomplete="on"><h2>Welcome back 👋</h2><p class="sub">Sign in to your sales desk</p>
-    <label>Username<input class="field" id="lc" autocomplete="username" autocapitalize="characters" spellcheck="false" value="${esc(code0 || store.get("lt-code") || "")}"></label>
+    <label>Username<input class="field" id="lc" autocomplete="username" autocapitalize="characters" spellcheck="false" value="${esc(code0 || "")}"></label>
     <label>Password<span class="pwrap"><input class="field" id="lp" type="password" autocomplete="current-password" placeholder="Your password"><button type="button" id="lpShow">Show</button></span></label>
-    <label class="chk"><input type="checkbox" id="lr" ${store.get("lt-pw") ? "checked" : ""}> Keep me signed in on this device</label>
     ${err ? `<div class="err">${esc(err)}</div>` : ""}<button class="btn" type="submit">Sign in →</button>
     <div class="lock">🔒 Your data is locked with your own password</div><div class="help">Forgot your password? Ask the office for a new one.</div></form></section></div>`;
   const pi = document.getElementById("lp"), sb = document.getElementById("lpShow"); sb.onclick = () => { pi.type = pi.type === "password" ? "text" : "password"; sb.textContent = pi.type === "password" ? "Show" : "Hide"; pi.focus(); };
   (document.getElementById("lc").value ? pi : document.getElementById("lc")).focus();
   document.getElementById("lf").onsubmit = async e => { e.preventDefault(); const c = document.getElementById("lc").value, p = document.getElementById("lp").value; if (!c || !p) return; const sbtn = e.target.querySelector(".btn"); sbtn.textContent = "Opening your desk…"; sbtn.disabled = true;
-    try { const P = await unlock(c, p); store.set("lt-code", c.trim().toUpperCase()); if (document.getElementById("lr").checked) store.set("lt-pw", p); else store.del("lt-pw"); boot(P); }
+    try { const P = await unlock(c, p); boot(P); }
     catch(x){ loginView(x.message === "code" ? "Username or password is wrong." : x.message === "pw" ? "Username or password is wrong." : "Couldn't open ─ check your connection.", c); } }; }
 // ---------- the desk's own salesperson screens, fed from the unlocked file instead of claude.ai ----------
 function boot(P){ const code = P.meta.code, TK = "lt-team-" + code, SK = "lt-sent-" + code;
@@ -101,6 +100,6 @@ function boot(P){ const code = P.meta.code, TK = "lt-team-" + code, SK = "lt-sen
   (async () => { const A = await (await fetch("app.json?t=" + Date.now(), { cache: "no-store" })).json(); const k = await crypto.subtle.importKey("raw", b64(P.appkey), "AES-GCM", false, ["decrypt"]);
     const raw = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b64(A.iv) }, k, b64(A.ct)); return new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream("gzip"))).text(); })().then(html => { document.open(); document.write(html); document.close(); const st = document.createElement("style"); st.textContent = '#askFab,[data-tmgo="ask"]{display:none!important}'; (document.head || document.body).appendChild(st); document.title = "Lucky Taro, Inc."; [["icon", "favicon.png"], ["apple-touch-icon", "apple-touch-icon.png"]].forEach(([r, h]) => { const l = document.createElement("link"); l.rel = r; l.href = h; (document.head || document.body).appendChild(l); }); setTimeout(ordersBar, 3000); }, () => { store.del("lt-pw"); loginView("Couldn't open the screens ─ sign in again."); }); }
 if (!window.isSecureContext || !(window.crypto && crypto.subtle)){ document.getElementById("app").innerHTML = `<div class="side" style="min-height:100vh"><div class="login"><h2>🔒 Secure link needed</h2><p>This page must be opened with <b>https://</b> so your password stays private.</p><p><a class="btn" style="display:block;text-align:center;text-decoration:none" href="https://${esc(location.host + location.pathname)}">Open the secure page</a></p><p class="mut">If that doesn't open yet, the office is still switching it on ─ try again later.</p></div></div>`; return; }
-(async () => { const c = store.get("lt-code"), p = store.get("lt-pw"); if (c && p){ try { return boot(await unlock(c, p)); } catch(e){} } loginView(); })();
+store.del("lt-pw"); store.del("lt-code");   /* nothing kept on the device ─ sign in each time */ loginView();
 })();
 </script></body></html>
