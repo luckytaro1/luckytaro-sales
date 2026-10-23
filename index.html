@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Lucky Taro Sales</title><meta name="robots" content="noindex,nofollow">
+<style>
+:root{color-scheme:dark}html,body{margin:0;background:#141a26;color:#e8edf6;font:15px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+.login{max-width:380px;margin:12vh auto 0;display:flex;flex-direction:column;gap:12px;background:#1d2536;border:1px solid #3a4762;border-radius:14px;padding:18px;box-sizing:border-box}
+.login h1{text-align:center;margin:0 0 6px;font-size:22px}.login label{color:#9aa6bd;display:flex;flex-direction:column;gap:4px}
+.field{background:#111827;border:1px solid #3a4762;border-radius:10px;padding:10px 12px;outline:none;color:#e8edf6;font:inherit}.field:focus{border-color:#818cf8}
+.btn{cursor:pointer;background:#4f46e5;color:#fff;border:0;border-radius:10px;padding:11px;font:inherit;font-weight:600}.red{color:#f87171}.mut{color:#9aa6bd}
+.row{display:flex;gap:8px;align-items:center}
+</style></head><body><div id="app"><p class="mut" style="text-align:center;margin-top:30vh">Opening…</p></div>
+<script>
+(() => { "use strict";
+const ORDER_EMAIL = "purchase@luckytaro.com";
+const store = { get(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }, set(k, v){ try { localStorage.setItem(k, v); } catch(e){} }, del(k){ try { localStorage.removeItem(k); } catch(e){} } };
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+if (/[?&]out\b/.test(location.search)){ store.del("lt-pw"); history.replaceState(null, "", location.pathname); }
+// the salesperson's file is locked with their password (AES-256-GCM, key from PBKDF2-SHA256)
+async function sha(s){ const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)); return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, "0")).join(""); }
+const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+async function unlock(code, pw){ code = code.trim().toUpperCase(); const f = (await sha("lt-sales|" + code)).slice(0, 20);
+  const r = await fetch(`data/${f}.json?t=${Date.now()}`, { cache: "no-store" }); if (!r.ok) throw new Error("code"); const E = await r.json();
+  const km = await crypto.subtle.importKey("raw", new TextEncoder().encode(pw), "PBKDF2", false, ["deriveKey"]);
+  const key = await crypto.subtle.deriveKey({ name: "PBKDF2", salt: b64(E.salt), iterations: E.it, hash: "SHA-256" }, km, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
+  let raw; try { raw = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b64(E.iv) }, key, b64(E.ct)); } catch(e){ throw new Error("pw"); }
+  return JSON.parse(await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream("gzip"))).text()); }
+function loginView(err, code0){ document.getElementById("app").innerHTML = `<form class="login" id="lf"><h1>🥭 Lucky Taro Sales</h1>
+  <label>Your code<input class="field" id="lc" autocomplete="username" autocapitalize="characters" value="${esc(code0 || store.get("lt-code") || "")}"></label>
+  <label>Password<input class="field" id="lp" type="password" autocomplete="current-password"></label>
+  <label class="row" style="flex-direction:row"><input type="checkbox" id="lr" ${store.get("lt-pw") ? "checked" : ""}> Keep me signed in on this device</label>
+  ${err ? `<div class="red">${esc(err)}</div>` : ""}<button class="btn" type="submit">Sign in</button></form>`;
+  document.getElementById("lf").onsubmit = async e => { e.preventDefault(); const c = document.getElementById("lc").value, p = document.getElementById("lp").value; if (!c || !p) return; e.target.querySelector("button").textContent = "Opening…";
+    try { const P = await unlock(c, p); store.set("lt-code", c.trim().toUpperCase()); if (document.getElementById("lr").checked) store.set("lt-pw", p); else store.del("lt-pw"); boot(P); }
+    catch(x){ loginView(x.message === "code" ? "That code isn't set up yet ─ ask the office." : x.message === "pw" ? "Wrong password." : "Couldn't open ─ check your connection.", c); } }; }
+// ---------- the desk's own salesperson screens, fed from the unlocked file instead of claude.ai ----------
+function boot(P){ const code = P.meta.code, TK = "lt-team-" + code, SK = "lt-sent-" + code;
+  const docs = { ...P.docs, "settings/team": { members: { U: { code: P.meta.rep, name: P.meta.name, role: "rep" } } } };
+  try { docs["team/U"] = JSON.parse(store.get(TK) || "{}"); } catch(e){ docs["team/U"] = {}; }
+  const L = new Map(), clone = d => d == null ? d : JSON.parse(JSON.stringify(d));
+  const snap = path => { const d = docs[path]; return { exists: d !== undefined, id: path.split("/").pop(), ref: { path, id: path.split("/").pop() }, data: () => clone(d), get: k => d ? d[k] : undefined }; };
+  const kids = path => { const pre = path + "/"; const ds = Object.keys(docs).filter(k => k.startsWith(pre) && !k.slice(pre.length).includes("/")).map(snap); return { docs: ds, empty: !ds.length, size: ds.length, forEach: f => ds.forEach(f), docChanges: () => ds.map(d => ({ type: "added", doc: d })) }; };
+  const notify = path => { (L.get(path) || []).forEach(cb => { try { cb(snap(path)); } catch(e){} }); const par = path.split("/").slice(0, -1).join("/"); (L.get("c:" + par) || []).forEach(cb => { try { cb(kids(par)); } catch(e){} }); };
+  const wrote = path => { if (path === "team/U"){ store.set(TK, JSON.stringify(docs[path] || {})); setTimeout(ordersBar, 50); } notify(path); };
+  const doc = path => ({ id: path.split("/").pop(), path,
+    get: async () => snap(path), onSnapshot: (cb, err) => { (L.get(path) || L.set(path, []).get(path)).push(cb); setTimeout(() => cb(snap(path)), 0); return () => {}; },
+    set: async (v, o) => { docs[path] = o && o.merge ? { ...(docs[path] || {}), ...clone(v) } : clone(v); wrote(path); },
+    update: async v => { if (docs[path] === undefined) throw Object.assign(new Error("not found"), { code: "not_found" }); docs[path] = { ...docs[path], ...clone(v) }; wrote(path); },
+    delete: async () => { delete docs[path]; wrote(path); }, collection: n => coll(path + "/" + n) });
+  const coll = path => { const q = { id: path.split("/").pop(), path, where: () => q, orderBy: () => q, limit: () => q, startAfter: () => q, get: async () => kids(path),
+    onSnapshot: cb => { (L.get("c:" + path) || L.set("c:" + path, []).get("c:" + path)).push(cb); setTimeout(() => cb(kids(path)), 0); return () => {}; }, doc: id => doc(path + "/" + (id || Math.random().toString(36).slice(2))), add: async v => { const d = doc(path + "/" + Math.random().toString(36).slice(2)); await d.set(v); return d; } }; return q; };
+  const db = { doc, collection: coll, batch: () => { const ops = []; return { set: (d, v, o) => ops.push(() => d.set(v, o)), update: (d, v) => ops.push(() => d.update(v)), delete: d => ops.push(() => d.delete()), commit: async () => { for (const f of ops) await f(); } }; }, runTransaction: async f => f({ get: d => d.get(), set: (d, v) => d.set(v), update: (d, v) => d.update(v) }) };
+  const user = { isOwner: async () => false, canEdit: async () => false, can: async n => n === "data.write", id: async () => "U", me: async () => ({ id: "U", name: P.meta.name || code }), profiles: async () => ({}), search: async () => [] };
+  window.claude = { use: async n => n === "db" ? db : n === "user" ? user : null };
+  // sales orders go to the office by email (there's no live link back to the desk from here)
+  const custName = id => { for (const k in docs){ if (!/\/cust\d+$/.test(k)) continue; const c = (docs[k].list || []).find(x => x.id === id); if (c) return [c.name, c.code]; } return [id, ""]; };
+  const pending = () => { let sent = {}; try { sent = JSON.parse(store.get(SK) || "{}"); } catch(e){} return ((docs["team/U"] || {}).soOut || []).filter(so => so && !so.void && (so.lines || []).some(l => Number(l.q) > 0) && sent[so.uid] !== so.at); };
+  function ordersBar(){ let b = document.getElementById("ltOrd"); const P0 = pending(); if (!P0.length){ if (b) b.remove(); return; }
+    if (!b){ b = document.createElement("div"); b.id = "ltOrd"; b.style.cssText = "position:fixed;right:12px;bottom:calc(76px + env(safe-area-inset-bottom));z-index:9999;background:#b91c1c;color:#fff;border-radius:12px;padding:10px 14px;font:600 14px system-ui;box-shadow:0 6px 20px rgba(0,0,0,.4);display:flex;gap:10px;align-items:center"; document.body.appendChild(b); }
+    b.innerHTML = `${P0.length} order${P0.length === 1 ? "" : "s"} not sent to the office <button id="ltSend" style="all:unset;cursor:pointer;background:#fff;color:#b91c1c;border-radius:8px;padding:6px 10px">✉ Send</button>`;
+    document.getElementById("ltSend").onclick = () => { const O = pending(); const txt = O.map(so => { const [n, c] = custName(so.cid); return [`SALES ORDER ─ ${n}${c ? " (" + c + ")" : ""}`, `Salesperson: ${P.meta.name || ""} (${P.meta.rep})`, `Ship: ${so.date || ""}`, so.ref ? `PO / note: ${so.ref}` : null, "", ...so.lines.filter(l => Number(l.q) > 0).map(l => `${l.q} cs  ${l.d}${l.p ? " " + l.p : ""}${l.no ? "  #" + l.no : ""}`), "", `[order-id ${so.uid}]`].filter(x => x !== null).join("\n"); }).join("\n\n────────\n\n");
+      const subj = O.length === 1 ? `Sales order ─ ${custName(O[0].cid)[0]} ─ ${P.meta.rep}` : `${O.length} sales orders ─ ${P.meta.rep}`;
+      location.href = `mailto:${ORDER_EMAIL}?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(txt)}`;
+      setTimeout(() => { if (window.confirm("Did the email go out? Press OK and these orders are marked as sent.")){ let sent = {}; try { sent = JSON.parse(store.get(SK) || "{}"); } catch(e){} O.forEach(so => sent[so.uid] = so.at); store.set(SK, JSON.stringify(sent)); ordersBar(); } }, 1500); }; }
+  (async () => { const A = await (await fetch("app.json?t=" + Date.now(), { cache: "no-store" })).json(); const k = await crypto.subtle.importKey("raw", b64(P.appkey), "AES-GCM", false, ["decrypt"]);
+    const raw = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b64(A.iv) }, k, b64(A.ct)); return new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream("gzip"))).text(); })().then(html => { document.open(); document.write(html); document.close(); const st = document.createElement("style"); st.textContent = '#askFab,[data-tmgo="ask"]{display:none!important}'; (document.head || document.body).appendChild(st); document.title = "Lucky Taro Sales"; setTimeout(ordersBar, 3000); }, () => { store.del("lt-pw"); loginView("Couldn't open the screens ─ sign in again."); }); }
+(async () => { const c = store.get("lt-code"), p = store.get("lt-pw"); if (c && p){ try { return boot(await unlock(c, p)); } catch(e){} } loginView(); })();
+})();
+</script></body></html>
