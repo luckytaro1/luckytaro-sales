@@ -25,12 +25,12 @@ for code, lg in LG.items():
     fid = hashlib.sha256(('lt-sales|' + code).encode()).hexdigest()[:20]; fp = os.path.join(out, fid + '.json')
     try:
         old = json.load(open(fp))
-        if old.get('at') == int(meta.get('at') or 0) and old.get('v') == 4 and old.get('ak') == hashlib.sha256((AK or '').encode()).hexdigest()[:8] and not os.environ.get('FORCE'): continue   # nothing new from the desk
+        if old.get('at') == int(meta.get('at') or 0) and old.get('v') == 4 and old.get('ak') == hashlib.sha256((AK or '').encode()).hexdigest()[:8] and old.get('pk') == hashlib.sha256(((AK or '') + '|' + lg['pw']).encode()).hexdigest()[:12] and not os.environ.get('FORCE'): continue   # nothing new from the desk
     except Exception: pass
     raw = gzip.compress(json.dumps(pkg, separators=(',', ':')).encode())
     salt, iv = os.urandom(16), os.urandom(12)
     key = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=IT).derive(lg['pw'].encode())
     ct = AESGCM(key).encrypt(iv, raw, None)
-    E = {'v': 4, 'ak': hashlib.sha256((AK or '').encode()).hexdigest()[:8], 'salt': base64.b64encode(salt).decode(), 'iv': base64.b64encode(iv).decode(), 'it': IT, 'at': int(meta.get('at') or time.time() * 1000), 'ct': base64.b64encode(ct).decode()}
+    E = {'v': 4, 'ak': hashlib.sha256((AK or '').encode()).hexdigest()[:8], 'pk': hashlib.sha256(((AK or '') + '|' + lg['pw']).encode()).hexdigest()[:12], 'salt': base64.b64encode(salt).decode(), 'iv': base64.b64encode(iv).decode(), 'it': IT, 'at': int(meta.get('at') or time.time() * 1000), 'ct': base64.b64encode(ct).decode()}
     json.dump(E, open(fp, 'w')); done.append((code, fid, len(ct)))
 print(json.dumps(done))
