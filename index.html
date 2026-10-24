@@ -42,17 +42,12 @@
 (() => { "use strict";
 const ORDER_EMAIL = "purchase@luckytaro.com", LIVE = "https://lt-live.purchase-3d8.workers.dev";
 // the newest locked file: straight from the office desk (Cloudflare link) when it's there and newer, else the copy on this site
-async function getLocked(f){ const gh = fetch(`data/${f}.json?t=${Date.now()}`, { cache: "no-store" }).then(r => r.ok ? r.json() : null).catch(() => null);
-  const lv = (async () => { try { const r = await fetch(`${LIVE}/d/${f}?t=${Date.now()}`, { cache: "no-store" }); if (!r.ok) return null; let E = await r.json();
-      if (E && E.parts){ const P = await Promise.all(Array.from({ length: E.parts }, (_, i) => fetch(`${LIVE}/d/${f}_p${i}?t=${Date.now()}`, { cache: "no-store" }).then(x => x.ok ? x.text() : Promise.reject()))); E = JSON.parse(P.join("")); }
-      return E && E.ct ? E : null; } catch(e){ return null; } })();
-  const [a, b] = await Promise.all([gh, lv]); if (a && b) return (b.at || 0) >= (a.at || 0) ? b : a; return b || a; }
-const store = { get(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }, set(k, v){ try { localStorage.setItem(k, v); } catch(e){} }, del(k){ try { localStorage.removeItem(k); } catch(e){} } };
-const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-if (/[?&]out\b/.test(location.search)){ store.del("lt-pw"); history.replaceState(null, "", location.pathname); }
-// the salesperson's file is locked with their password (AES-256-GCM, key from PBKDF2-SHA256)
-async function sha(s){ const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)); return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, "0")).join(""); }
-const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+async function liveGet(f){ try { const r = await fetch(`${LIVE}/d/${f}?t=${Date.now()}`, { cache: "no-store" }); if (!r.ok) return null; let E = await r.json();
+    if (E && E.parts){ const n = Math.min(Number(E.parts) || 0, 40), pid = String(E.pid || f).replace(/[^A-Za-z0-9_-]/g, ""); if (!n) return null;
+      const P = await Promise.all(Array.from({ length: n }, (_, i) => fetch(`${LIVE}/d/${pid}_p${i}?t=${Date.now()}`, { cache: "no-store" }).then(x => x.ok ? x.text() : Promise.reject()))); E = JSON.parse(P.join("")); }
+    return E && E.ct ? E : null; } catch(e){ return null; } }
+const ghGet = f => fetch(`data/${f}.json?t=${Date.now()}`, { cache: "no-store" }).then(r => r.ok ? r.json() : null).catch(() => null);
+async function getLocked(f){ const [a, b] = await Promise.all([ghGet(f), liveGet(f)]); if (a && b) return (b.at || 0) >= (a.at || 0) ? b : a; return b || a; }
 async function unlock(code, pw, E0){ code = code.trim().toUpperCase(); const f = (await sha("lt-sales|" + code)).slice(0, 20);
   let E = E0; if (!E){ E = await getLocked(f); if (!E) throw new Error("code"); }
   const km = await crypto.subtle.importKey("raw", new TextEncoder().encode(pw), "PBKDF2", false, ["deriveKey"]);
@@ -86,7 +81,7 @@ function boot(P, lc, lp){ const code = P.meta.code, TK = "lt-team-" + code, SK =
   const snap = path => { const d = docs[path]; return { exists: d !== undefined, id: path.split("/").pop(), ref: { path, id: path.split("/").pop() }, data: () => clone(d), get: k => d ? d[k] : undefined }; };
   const kids = path => { const pre = path + "/"; const ds = Object.keys(docs).filter(k => k.startsWith(pre) && !k.slice(pre.length).includes("/")).map(snap); return { docs: ds, empty: !ds.length, size: ds.length, forEach: f => ds.forEach(f), docChanges: () => ds.map(d => ({ type: "added", doc: d })) }; };
   const notify = path => { (L.get(path) || []).forEach(cb => { try { cb(snap(path)); } catch(e){} }); const par = path.split("/").slice(0, -1).join("/"); (L.get("c:" + par) || []).forEach(cb => { try { cb(kids(par)); } catch(e){} }); };
-  const act = what => { fid.then(f => fetch(`${LIVE}/log/${f}`, { method: "POST", headers: { "content-type": "text/plain" }, body: JSON.stringify({ who: code, what: String(what).slice(0, 300) }), keepalive: true })).catch(() => {}); };   /* what they did shows in the office Log */
+  const act = what => { fid.then(f => fetch(`${LIVE}/log/${f}`, { method: "POST", headers: { "content-type": "text/plain" }, body: JSON.stringify({ what: String(what).slice(0, 300) }), keepalive: true })).catch(() => {}); };   /* what they did shows in the office Log */
   window.__ltAct = act;
   const wrote = path => { if (/^log\//.test(path)){ const d = docs[path]; if (d && d.what) act(d.what); }
     if (path === "team/U"){ store.set(TK, JSON.stringify(docs[path] || {})); setTimeout(ordersBar, 50); } notify(path); };
@@ -103,8 +98,14 @@ function boot(P, lc, lp){ const code = P.meta.code, TK = "lt-team-" + code, SK =
   window.__ltWeb = true; window.__ltCode = code;
   // stays up to date while open: every minute, the newest prices / stock / orders from the office (only downloads when something changed)
   let lastAt = P.meta.at; const fid = sha("lt-sales|" + String(lc || code).trim().toUpperCase()).then(h => h.slice(0, 20));
-  const fresh = async () => { if (document.hidden || !lp) return; try { const E = await getLocked(await fid); if (!E || !E.at || E.at <= lastAt) return;
-      const N = await unlock(lc, lp, E); lastAt = E.at; Object.keys(docs).filter(k => k.startsWith("team/U/pkg/")).forEach(k => delete docs[k]); Object.assign(docs, N.docs);
+  // every 30 s a tiny "when was it saved" check on the live link; the whole file only downloads when it changed (the site copy: every 5 minutes, or when the live link is down)
+  let lastW = 0, ghAt = 0;
+  const fresh = async () => { if (document.hidden || !lp) return; try { const f = await fid; let E = null;
+      const h = await fetch(`${LIVE}/h/${f}?t=${Date.now()}`, { cache: "no-store" }).then(r => r.ok ? r.json() : null).catch(() => null);
+      if (h && h.w && h.w !== lastW){ E = await liveGet(f); if (E) lastW = h.w; } else if (!h) E = await liveGet(f);   /* an older link without the quick check */
+      if (Date.now() - ghAt > 5 * 60000){ ghAt = Date.now(); const G = await ghGet(f); if (G && (!E || (G.at || 0) > (E.at || 0))) E = G; }
+      if (!E || !E.at || E.at <= lastAt) return;
+      let N; try { N = await unlock(lc, lp, E); } catch(x){ if (x && x.message === "pw"){ store.del("lt-pw"); location.replace(location.pathname + "?pwchanged=1"); } return; }   /* the office changed the password: sign in again */ lastAt = E.at; Object.keys(docs).filter(k => k.startsWith("team/U/pkg/")).forEach(k => delete docs[k]); Object.assign(docs, N.docs);
       const si = soInOf(); if (si.length){ docs["team/U"] = { ...(docs["team/U"] || {}), soIn: si }; store.set(TK, JSON.stringify(docs["team/U"])); notify("team/U"); }
       notify("team/U/pkg/meta"); } catch(e){} };
   const freshWatch = () => { act("Signed in");
@@ -139,6 +140,6 @@ function boot(P, lc, lp){ const code = P.meta.code, TK = "lt-team-" + code, SK =
   (async () => { const A = await (await fetch("app.json?t=" + Date.now(), { cache: "no-store" })).json(); const k = await crypto.subtle.importKey("raw", b64(P.appkey), "AES-GCM", false, ["decrypt"]);
     const raw = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b64(A.iv) }, k, b64(A.ct)); return new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream("gzip"))).text(); })().then(html => { document.open(); document.write(html); document.close(); const st = document.createElement("style"); st.textContent = '#askFab,[data-tmgo="ask"]{display:none!important}'; (document.head || document.body).appendChild(st); document.title = "Lucky Taro, Inc."; [["icon", "favicon.ico?v=2"], ["apple-touch-icon", "apple-touch-icon.png?v=2"]].forEach(([r, h]) => { const l = document.createElement("link"); l.rel = r; l.href = h; (document.head || document.body).appendChild(l); }); setTimeout(ordersBar, 3000); idleWatch(); freshWatch(); }, () => { store.del("lt-pw"); loginView("Couldn't open the screens ─ sign in again."); }); }
 if (!window.isSecureContext || !(window.crypto && crypto.subtle)){ document.getElementById("app").innerHTML = `<div class="side" style="min-height:100vh"><div class="login"><h2>🔒 Secure link needed</h2><p>This page must be opened with <b>https://</b> so your password stays private.</p><p><a class="btn" style="display:block;text-align:center;text-decoration:none" href="https://${esc(location.host + location.pathname)}">Open the secure page</a></p><p class="mut">If that doesn't open yet, the office is still switching it on ─ try again later.</p></div></div>`; return; }
-store.del("lt-pw"); store.del("lt-code");   /* nothing kept on the device ─ sign in each time */ { const so = /signedout=1/.test(location.search); if (so) try { history.replaceState(null, "", location.pathname); } catch(e){} loginView(so ? "Signed out after 2 hours with no activity ─ sign in again." : undefined); }
+store.del("lt-pw"); store.del("lt-code");   /* nothing kept on the device ─ sign in each time */ { const so = /signedout=1/.test(location.search), pc = /pwchanged=1/.test(location.search); if (so || pc) try { history.replaceState(null, "", location.pathname); } catch(e){} loginView(so ? "Signed out after 2 hours with no activity ─ sign in again." : pc ? "Your password was changed by the office ─ sign in with the new one." : undefined); }
 })();
 </script></body></html>

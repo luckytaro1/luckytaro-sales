@@ -6,7 +6,7 @@ import json, sys, os, glob, gzip, hashlib, base64, time
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-IT = 200000
+IT = 600000
 def load(p):
     d = json.load(open(p)); return d.get('data', d)
 root, pwf = sys.argv[1], sys.argv[2]; J = json.load(open(pwf)); AK = J.pop('_appkey', None); RD = J.pop('_reader', None) or None; LG = {k.upper(): v for k, v in J.items()}
@@ -24,14 +24,11 @@ for code, lg in LG.items():
     rtok = hashlib.sha256(((AK or '') + '|rt|' + code + '|' + lg['pw']).encode()).hexdigest()[:40]   # the picture reader's pass for this login
     pkg = {'meta': {'name': meta.get('name'), 'code': code, 'rep': meta.get('code'), 'at': meta.get('at')}, 'docs': docs, 'appkey': AK, **({'reader': RD, 'rtok': rtok} if RD else {})}
     fid = hashlib.sha256(('lt-sales|' + code).encode()).hexdigest()[:20]; fp = os.path.join(out, fid + '.json')
-    try:
-        old = json.load(open(fp))
-        if old.get('at') == int(meta.get('at') or 0) and old.get('v') == 4 and old.get('ak') == hashlib.sha256((AK or '').encode()).hexdigest()[:8] and old.get('pk') == hashlib.sha256(((AK or '') + '|' + lg['pw'] + '|' + (RD or '')).encode()).hexdigest()[:12] and not os.environ.get('FORCE'): continue   # nothing new from the desk
-    except Exception: pass
     raw = gzip.compress(json.dumps(pkg, separators=(',', ':')).encode())
     salt, iv = os.urandom(16), os.urandom(12)
     key = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=IT).derive(lg['pw'].encode())
     ct = AESGCM(key).encrypt(iv, raw, None)
-    E = {'v': 4, 'ak': hashlib.sha256((AK or '').encode()).hexdigest()[:8], 'pk': hashlib.sha256(((AK or '') + '|' + lg['pw'] + '|' + (RD or '')).encode()).hexdigest()[:12], **({'rt': hashlib.sha256(rtok.encode()).hexdigest()} if RD else {}), 'salt': base64.b64encode(salt).decode(), 'iv': base64.b64encode(iv).decode(), 'it': IT, 'at': int(meta.get('at') or time.time() * 1000), 'ct': base64.b64encode(ct).decode()}
+    # nothing derived from the password goes in the public file (no quick hashes to guess against) ─ only the PBKDF2-locked data
+    E = {'v': 5, 'salt': base64.b64encode(salt).decode(), 'iv': base64.b64encode(iv).decode(), 'it': IT, 'at': int(meta.get('at') or time.time() * 1000), 'ct': base64.b64encode(ct).decode()}
     json.dump(E, open(fp, 'w')); done.append((code, fid, len(ct)))
 print(json.dumps(done))
