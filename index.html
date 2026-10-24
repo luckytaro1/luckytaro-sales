@@ -48,6 +48,12 @@ async function liveGet(f){ try { const r = await fetch(`${LIVE}/d/${f}?t=${Date.
     return E && E.ct ? E : null; } catch(e){ return null; } }
 const ghGet = f => fetch(`data/${f}.json?t=${Date.now()}`, { cache: "no-store" }).then(r => r.ok ? r.json() : null).catch(() => null);
 async function getLocked(f){ const [a, b] = await Promise.all([ghGet(f), liveGet(f)]); if (a && b) return (b.at || 0) >= (a.at || 0) ? b : a; return b || a; }
+const store = { get(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }, set(k, v){ try { localStorage.setItem(k, v); } catch(e){} }, del(k){ try { localStorage.removeItem(k); } catch(e){} } };
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+if (/[?&]out\b/.test(location.search)){ store.del("lt-pw"); history.replaceState(null, "", location.pathname); }
+// the salesperson's file is locked with their password (AES-256-GCM, key from PBKDF2-SHA256)
+async function sha(s){ const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)); return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, "0")).join(""); }
+const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 async function unlock(code, pw, E0){ code = code.trim().toUpperCase(); const f = (await sha("lt-sales|" + code)).slice(0, 20);
   let E = E0; if (!E){ E = await getLocked(f); if (!E) throw new Error("code"); }
   const km = await crypto.subtle.importKey("raw", new TextEncoder().encode(pw), "PBKDF2", false, ["deriveKey"]);
