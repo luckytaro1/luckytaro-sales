@@ -40,7 +40,13 @@
 </style></head><body><div id="app"><p class="mut" style="text-align:center;margin-top:40vh;color:#7a7187">Opening…</p></div>
 <script>
 (() => { "use strict";
-const ORDER_EMAIL = "purchase@luckytaro.com";
+const ORDER_EMAIL = "purchase@luckytaro.com", LIVE = "https://lt-live.purchase-3d8.workers.dev";
+// the newest locked file: straight from the office desk (Cloudflare link) when it's there and newer, else the copy on this site
+async function getLocked(f){ const gh = fetch(`data/${f}.json?t=${Date.now()}`, { cache: "no-store" }).then(r => r.ok ? r.json() : null).catch(() => null);
+  const lv = (async () => { try { const r = await fetch(`${LIVE}/d/${f}?t=${Date.now()}`, { cache: "no-store" }); if (!r.ok) return null; let E = await r.json();
+      if (E && E.parts){ const P = await Promise.all(Array.from({ length: E.parts }, (_, i) => fetch(`${LIVE}/d/${f}_p${i}?t=${Date.now()}`, { cache: "no-store" }).then(x => x.ok ? x.text() : Promise.reject()))); E = JSON.parse(P.join("")); }
+      return E && E.ct ? E : null; } catch(e){ return null; } })();
+  const [a, b] = await Promise.all([gh, lv]); if (a && b) return (b.at || 0) >= (a.at || 0) ? b : a; return b || a; }
 const store = { get(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }, set(k, v){ try { localStorage.setItem(k, v); } catch(e){} }, del(k){ try { localStorage.removeItem(k); } catch(e){} } };
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 if (/[?&]out\b/.test(location.search)){ store.del("lt-pw"); history.replaceState(null, "", location.pathname); }
@@ -48,7 +54,7 @@ if (/[?&]out\b/.test(location.search)){ store.del("lt-pw"); history.replaceState
 async function sha(s){ const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)); return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, "0")).join(""); }
 const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 async function unlock(code, pw, E0){ code = code.trim().toUpperCase(); const f = (await sha("lt-sales|" + code)).slice(0, 20);
-  let E = E0; if (!E){ const r = await fetch(`data/${f}.json?t=${Date.now()}`, { cache: "no-store" }); if (!r.ok) throw new Error("code"); E = await r.json(); }
+  let E = E0; if (!E){ E = await getLocked(f); if (!E) throw new Error("code"); }
   const km = await crypto.subtle.importKey("raw", new TextEncoder().encode(pw), "PBKDF2", false, ["deriveKey"]);
   const key = await crypto.subtle.deriveKey({ name: "PBKDF2", salt: b64(E.salt), iterations: E.it, hash: "SHA-256" }, km, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
   let raw; try { raw = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b64(E.iv) }, key, b64(E.ct)); } catch(e){ throw new Error("pw"); }
@@ -80,7 +86,10 @@ function boot(P, lc, lp){ const code = P.meta.code, TK = "lt-team-" + code, SK =
   const snap = path => { const d = docs[path]; return { exists: d !== undefined, id: path.split("/").pop(), ref: { path, id: path.split("/").pop() }, data: () => clone(d), get: k => d ? d[k] : undefined }; };
   const kids = path => { const pre = path + "/"; const ds = Object.keys(docs).filter(k => k.startsWith(pre) && !k.slice(pre.length).includes("/")).map(snap); return { docs: ds, empty: !ds.length, size: ds.length, forEach: f => ds.forEach(f), docChanges: () => ds.map(d => ({ type: "added", doc: d })) }; };
   const notify = path => { (L.get(path) || []).forEach(cb => { try { cb(snap(path)); } catch(e){} }); const par = path.split("/").slice(0, -1).join("/"); (L.get("c:" + par) || []).forEach(cb => { try { cb(kids(par)); } catch(e){} }); };
-  const wrote = path => { if (path === "team/U"){ store.set(TK, JSON.stringify(docs[path] || {})); setTimeout(ordersBar, 50); } notify(path); };
+  const act = what => { fid.then(f => fetch(`${LIVE}/log/${f}`, { method: "POST", headers: { "content-type": "text/plain" }, body: JSON.stringify({ who: code, what: String(what).slice(0, 300) }), keepalive: true })).catch(() => {}); };   /* what they did shows in the office Log */
+  window.__ltAct = act;
+  const wrote = path => { if (/^log\//.test(path)){ const d = docs[path]; if (d && d.what) act(d.what); }
+    if (path === "team/U"){ store.set(TK, JSON.stringify(docs[path] || {})); setTimeout(ordersBar, 50); } notify(path); };
   const doc = path => ({ id: path.split("/").pop(), path,
     get: async () => snap(path), onSnapshot: (cb, err) => { (L.get(path) || L.set(path, []).get(path)).push(cb); setTimeout(() => cb(snap(path)), 0); return () => {}; },
     set: async (v, o) => { docs[path] = o && o.merge ? { ...(docs[path] || {}), ...clone(v) } : clone(v); wrote(path); },
@@ -90,15 +99,20 @@ function boot(P, lc, lp){ const code = P.meta.code, TK = "lt-team-" + code, SK =
     onSnapshot: cb => { (L.get("c:" + path) || L.set("c:" + path, []).get("c:" + path)).push(cb); setTimeout(() => cb(kids(path)), 0); return () => {}; }, doc: id => doc(path + "/" + (id || Math.random().toString(36).slice(2))), add: async v => { const d = doc(path + "/" + Math.random().toString(36).slice(2)); await d.set(v); return d; } }; return q; };
   const db = { doc, collection: coll, batch: () => { const ops = []; return { set: (d, v, o) => ops.push(() => d.set(v, o)), update: (d, v) => ops.push(() => d.update(v)), delete: d => ops.push(() => d.delete()), commit: async () => { for (const f of ops) await f(); } }; }, runTransaction: async f => f({ get: d => d.get(), set: (d, v) => d.set(v), update: (d, v) => d.update(v) }) };
   const user = { isOwner: async () => false, canEdit: async () => false, can: async n => n === "data.write", id: async () => "U", me: async () => ({ id: "U", name: P.meta.name || code }), profiles: async () => ({}), search: async () => [] };
-  const downloads = { save: async ({ filename, data }) => { const u = URL.createObjectURL(data instanceof Blob ? data : new Blob([data], { type: /\.csv$/i.test(filename) ? "text/csv" : "application/octet-stream" })); const a = document.createElement("a"); a.href = u; a.download = filename; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(u); a.remove(); }, 2000); return true; } };
+  const downloads = { save: async ({ filename, data }) => { try { act(`Downloaded ${filename}`); } catch(e){} const u = URL.createObjectURL(data instanceof Blob ? data : new Blob([data], { type: /\.csv$/i.test(filename) ? "text/csv" : "application/octet-stream" })); const a = document.createElement("a"); a.href = u; a.download = filename; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(u); a.remove(); }, 2000); return true; } };
   window.__ltWeb = true; window.__ltCode = code;
   // stays up to date while open: every minute, the newest prices / stock / orders from the office (only downloads when something changed)
   let lastAt = P.meta.at; const fid = sha("lt-sales|" + String(lc || code).trim().toUpperCase()).then(h => h.slice(0, 20));
-  const fresh = async () => { if (document.hidden || !lp) return; try { const r = await fetch(`data/${await fid}.json?t=${Date.now()}`, { cache: "no-store" }); if (!r.ok) return; const E = await r.json(); if (!E.at || E.at === lastAt) return;
+  const fresh = async () => { if (document.hidden || !lp) return; try { const E = await getLocked(await fid); if (!E || !E.at || E.at <= lastAt) return;
       const N = await unlock(lc, lp, E); lastAt = E.at; Object.keys(docs).filter(k => k.startsWith("team/U/pkg/")).forEach(k => delete docs[k]); Object.assign(docs, N.docs);
       const si = soInOf(); if (si.length){ docs["team/U"] = { ...(docs["team/U"] || {}), soIn: si }; store.set(TK, JSON.stringify(docs["team/U"])); notify("team/U"); }
       notify("team/U/pkg/meta"); } catch(e){} };
-  const freshWatch = () => { setInterval(fresh, 60000); document.addEventListener("visibilitychange", () => { if (!document.hidden) fresh(); }); };
+  const freshWatch = () => { act("Signed in");
+    window.addEventListener("click", e => { const a = e.target.closest && e.target.closest("a[href]"); if (!a) return; const h = a.getAttribute("href") || "", t = (a.textContent || "").trim().slice(0, 60);
+      if (/^mailto:/i.test(h)){ const sub = decodeURIComponent((h.match(/[?&]subject=([^&]*)/i) || [])[1] || ""); act(`Opened an email to ${decodeURIComponent(h.slice(7).split("?")[0])}${sub ? ` ─ "${sub.slice(0, 80)}"` : ""}`); }
+      else if (/wa\.me|whatsapp:|api\.whatsapp/i.test(h)) act(`Opened WhatsApp ${(h.match(/\d{7,}/) || [""])[0]}${t ? " ─ " + t : ""}`);
+      else if (/^sms:/i.test(h)) act(`Opened a text to ${h.slice(4).split("?")[0]}`); }, true);
+    setInterval(fresh, 30000); document.addEventListener("visibilitychange", () => { if (!document.hidden) fresh(); }); };
   if (P.reader && P.rtok) window.__ltReader = async (prompt, imgs) => { const b64 = b => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",")[1] || ""); r.onerror = no; r.readAsDataURL(b); });
     const images = []; for (const b of imgs) images.push(await b64(b));
     const r = await fetch(P.reader, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ u: P.meta.code, t: P.rtok, prompt, images }) });
@@ -121,7 +135,7 @@ function boot(P, lc, lp){ const code = P.meta.code, TK = "lt-team-" + code, SK =
     document.getElementById("ltSend").onclick = () => { const O = pending(); const txt = O.map(so => { const [n, c] = custName(so.cid); return [`SALES ORDER ─ ${n}${c ? " (" + c + ")" : ""}`, `Salesperson: ${P.meta.name || ""} (${P.meta.rep})`, `Ship: ${so.date || ""}`, so.ref ? `PO / note: ${so.ref}` : null, "", ...so.lines.filter(l => Number(l.q) > 0).map(l => `${l.q} cs  ${l.d}${l.p ? " " + l.p : ""}${l.no ? "  #" + l.no : ""}`), "", `[order-id ${so.uid}]`].filter(x => x !== null).join("\n"); }).join("\n\n────────\n\n");
       const subj = O.length === 1 ? `Sales order ─ ${custName(O[0].cid)[0]} ─ ${P.meta.rep}` : `${O.length} sales orders ─ ${P.meta.rep}`;
       location.href = `mailto:${ORDER_EMAIL}?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(txt)}`;
-      setTimeout(() => { if (window.confirm("Did the email go out? Press OK and these orders are marked as sent.")){ let sent = {}; try { sent = JSON.parse(store.get(SK) || "{}"); } catch(e){} O.forEach(so => sent[so.uid] = so.at); store.set(SK, JSON.stringify(sent)); ordersBar(); } }, 1500); }; }
+      setTimeout(() => { if (window.confirm("Did the email go out? Press OK and these orders are marked as sent.")){ let sent = {}; try { sent = JSON.parse(store.get(SK) || "{}"); } catch(e){} O.forEach(so => sent[so.uid] = so.at); store.set(SK, JSON.stringify(sent)); act(`Sent ${O.length} sales order${O.length === 1 ? "" : "s"} to the office: ${O.map(so => custName(so.cid)[0]).join(", ").slice(0, 200)}`); ordersBar(); } }, 1500); }; }
   (async () => { const A = await (await fetch("app.json?t=" + Date.now(), { cache: "no-store" })).json(); const k = await crypto.subtle.importKey("raw", b64(P.appkey), "AES-GCM", false, ["decrypt"]);
     const raw = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b64(A.iv) }, k, b64(A.ct)); return new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream("gzip"))).text(); })().then(html => { document.open(); document.write(html); document.close(); const st = document.createElement("style"); st.textContent = '#askFab,[data-tmgo="ask"]{display:none!important}'; (document.head || document.body).appendChild(st); document.title = "Lucky Taro, Inc."; [["icon", "favicon.ico?v=2"], ["apple-touch-icon", "apple-touch-icon.png?v=2"]].forEach(([r, h]) => { const l = document.createElement("link"); l.rel = r; l.href = h; (document.head || document.body).appendChild(l); }); setTimeout(ordersBar, 3000); idleWatch(); freshWatch(); }, () => { store.del("lt-pw"); loginView("Couldn't open the screens ─ sign in again."); }); }
 if (!window.isSecureContext || !(window.crypto && crypto.subtle)){ document.getElementById("app").innerHTML = `<div class="side" style="min-height:100vh"><div class="login"><h2>🔒 Secure link needed</h2><p>This page must be opened with <b>https://</b> so your password stays private.</p><p><a class="btn" style="display:block;text-align:center;text-decoration:none" href="https://${esc(location.host + location.pathname)}">Open the secure page</a></p><p class="mut">If that doesn't open yet, the office is still switching it on ─ try again later.</p></div></div>`; return; }
