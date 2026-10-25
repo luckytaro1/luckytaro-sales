@@ -54,9 +54,18 @@ if (/[?&]out\b/.test(location.search)){ store.del("lt-pw"); history.replaceState
 // the salesperson's file is locked with their password (AES-256-GCM, key from PBKDF2-SHA256)
 async function sha(s){ const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)); return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, "0")).join(""); }
 const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+// device lock: this browser's own id (kept on the device) ─ the office approves up to 2 devices per login; the live link hands the device key only to those
+const devId = () => { let d = store.get("lt-dev"); if (!d || !/^[A-Za-z0-9]{16,40}$/.test(d)){ d = Array.from(crypto.getRandomValues(new Uint8Array(16)), b => "abcdefghijkmnpqrstuvwxyz23456789"[b % 32]).join(""); store.set("lt-dev", d); } return d; };
+const devName = () => { const u = navigator.userAgent; const os = /iPhone/.test(u) ? "iPhone" : /iPad/.test(u) ? "iPad" : /Android/.test(u) ? "Android" : /Windows/.test(u) ? "Windows" : /Mac/.test(u) ? "Mac" : "Device"; const br = /Edg\//.test(u) ? "Edge" : /CriOS|Chrome\//.test(u) ? "Chrome" : /Firefox|FxiOS/.test(u) ? "Firefox" : /Safari/.test(u) ? "Safari" : "browser"; return os + " · " + br; };
+const DKC = {};
+async function devKey(f, quiet){ if (DKC[f] !== undefined) return DKC[f]; let r; try { r = await fetch(`${LIVE}/k/${f}`, { method: "POST", headers: { "content-type": "text/plain" }, body: JSON.stringify({ dev: devId(), nm: devName() }) }); } catch(e){ if (quiet) return ""; throw new Error("net"); }
+  if (r.status === 403){ let j = {}; try { j = await r.json(); } catch(e){} const x = new Error("device"); x.nm = j.nm || devName(); x.where = j.where || ""; throw x; }
+  if (!r.ok){ if (quiet) return ""; throw new Error("net"); } let j = {}; try { j = await r.json(); } catch(e){} return (DKC[f] = String(j.dk || "")); }
 async function unlock(code, pw, E0){ code = code.trim().toUpperCase(); const f = (await sha("lt-sales|" + code)).slice(0, 20);
   let E = E0; if (!E){ E = await getLocked(f); if (!E) throw new Error("code"); }
-  const km = await crypto.subtle.importKey("raw", new TextEncoder().encode(pw), "PBKDF2", false, ["deriveKey"]);
+  const dk = E.dk ? await devKey(f) : (E0 ? "" : await devKey(f, true).then(() => "", () => ""));   /* a locked file needs this device's key; otherwise the sign-in is just logged */
+  if (E.dk && !dk) throw new Error("device");
+  const km = await crypto.subtle.importKey("raw", new TextEncoder().encode(E.dk ? pw + "|" + dk : pw), "PBKDF2", false, ["deriveKey"]);
   const key = await crypto.subtle.deriveKey({ name: "PBKDF2", salt: b64(E.salt), iterations: E.it, hash: "SHA-256" }, km, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
   let raw; try { raw = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b64(E.iv) }, key, b64(E.ct)); } catch(e){ throw new Error("pw"); }
   return JSON.parse(await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream("gzip"))).text()); }
@@ -77,7 +86,7 @@ function loginView(err, code0){ document.getElementById("app").innerHTML = `<div
   (document.getElementById("lc").value ? pi : document.getElementById("lc")).focus();
   document.getElementById("lf").onsubmit = async e => { e.preventDefault(); const c = document.getElementById("lc").value, p = document.getElementById("lp").value; if (!c || !p) return; const sbtn = e.target.querySelector(".btn"); sbtn.textContent = "Opening your desk…"; sbtn.disabled = true;
     try { const P = await unlock(c, p); boot(P, c, p); }
-    catch(x){ loginView(x.message === "code" ? "Username or password is wrong." : x.message === "pw" ? "Username or password is wrong." : "Couldn't open ─ check your connection.", c); } }; }
+    catch(x){ loginView(x.message === "code" ? "Username or password is wrong." : x.message === "pw" ? "Username or password is wrong." : x.message === "device" ? `This ${x.nm || "device"} isn't approved yet. Ask the office to approve it (Team → Website logins → 📱), then sign in again.` : "Couldn't open ─ check your connection.", c); } }; }
 // ---------- the desk's own salesperson screens, fed from the unlocked file instead of claude.ai ----------
 function boot(P, lc, lp){ const code = P.meta.code, TK = "lt-team-" + code, SK = "lt-sent-" + code;
   const docs = { ...P.docs, "settings/team": { members: { U: { code: P.meta.rep, name: P.meta.name, role: "rep" } } } };
@@ -89,6 +98,10 @@ function boot(P, lc, lp){ const code = P.meta.code, TK = "lt-team-" + code, SK =
   const notify = path => { (L.get(path) || []).forEach(cb => { try { cb(snap(path)); } catch(e){} }); const par = path.split("/").slice(0, -1).join("/"); (L.get("c:" + par) || []).forEach(cb => { try { cb(kids(par)); } catch(e){} }); };
   const act = what => { fid.then(f => fetch(`${LIVE}/log/${f}`, { method: "POST", headers: { "content-type": "text/plain" }, body: JSON.stringify({ what: String(what).slice(0, 300) }), keepalive: true })).catch(() => {}); };   /* what they did shows in the office Log */
   window.__ltAct = act;
+  /* order pictures go straight to the office through the live link (no email): one POST per page, the desk picks them up */
+  window.__ltPic = async (pages, note) => { const f = await fid, g = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    for (let i = 0; i < pages.length; i++){ const r = await fetch(`${LIVE}/pic/${f}`, { method: "POST", headers: { "content-type": "text/plain" }, body: JSON.stringify({ g, p: i + 1, n: pages.length, b: pages[i], note: String(note || "").slice(0, 200) }) });
+      const t = r.ok ? await r.text() : ""; if (r.status === 429) throw new Error("busy"); if (t !== "ok") throw new Error("failed " + r.status); } return g; };
   const wrote = path => { if (/^log\//.test(path)){ const d = docs[path]; if (d && d.what) act(d.what); }
     if (path === "team/U"){ store.set(TK, JSON.stringify(docs[path] || {})); setTimeout(ordersBar, 50); } notify(path); };
   const doc = path => ({ id: path.split("/").pop(), path,

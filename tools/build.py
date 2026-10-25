@@ -1,7 +1,7 @@
 """Lock each salesperson's package with their password and write data/<id>.json.
 usage: python3 build.py <pkg_root> <passwords.json>
   pkg_root/<member_id>/{meta,inv*,cust*,cr*}.json  (as saved from team/<id>/pkg)
-  logins.json: {"TEST": {"pw": "...", "member": "<member id>"}, ...}  ─ login code → whose package"""
+  logins.json: {"TEST": {"pw": "...", "member": "<member id>", "dk": "<device key, only when the device lock is on>"}, ...}  ─ login code → whose package"""
 import json, sys, os, glob, gzip, hashlib, base64, time
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
@@ -26,9 +26,10 @@ for code, lg in LG.items():
     fid = hashlib.sha256(('lt-sales|' + code).encode()).hexdigest()[:20]; fp = os.path.join(out, fid + '.json')
     raw = gzip.compress(json.dumps(pkg, separators=(',', ':')).encode())
     salt, iv = os.urandom(16), os.urandom(12)
-    key = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=IT).derive(lg['pw'].encode())
+    dk = lg.get('dk') or ''   # device lock: the file opens only with password + the device key the live link gives approved devices
+    key = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=IT).derive((lg['pw'] + '|' + dk if dk else lg['pw']).encode())
     ct = AESGCM(key).encrypt(iv, raw, None)
     # nothing derived from the password goes in the public file (no quick hashes to guess against) ─ only the PBKDF2-locked data
-    E = {'v': 5, 'salt': base64.b64encode(salt).decode(), 'iv': base64.b64encode(iv).decode(), 'it': IT, 'at': int(meta.get('at') or time.time() * 1000), 'ct': base64.b64encode(ct).decode()}
+    E = {'v': 5, 'salt': base64.b64encode(salt).decode(), 'iv': base64.b64encode(iv).decode(), 'it': IT, 'at': int(meta.get('at') or time.time() * 1000), 'ct': base64.b64encode(ct).decode(), **({'dk': 1} if dk else {})}
     json.dump(E, open(fp, 'w')); done.append((code, fid, len(ct)))
 print(json.dumps(done))
