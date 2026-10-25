@@ -17,12 +17,12 @@ for code, lg in LG.items():
     mf = os.path.join(mdir, 'meta.json')
     if not os.path.exists(mf): print('missing package for', code); continue
     meta = load(mf)
-    if meta.get('role') != 'rep': continue
+    if meta.get('role') not in ('rep', 'wh'): continue
     docs = {}
     for f in sorted(glob.glob(os.path.join(mdir, '*.json'))):
         docs['team/U/pkg/' + os.path.basename(f)[:-5]] = load(f)
     rtok = hashlib.sha256(((AK or '') + '|rt|' + code + '|' + lg['pw']).encode()).hexdigest()[:40]   # the picture reader's pass for this login
-    pkg = {'meta': {'name': meta.get('name'), 'code': code, 'rep': meta.get('code'), 'at': meta.get('at')}, 'docs': docs, 'appkey': AK, **({'reader': RD, 'rtok': rtok} if RD else {})}
+    pkg = {'meta': {'name': meta.get('name'), 'code': code, 'rep': meta.get('code'), 'at': meta.get('at'), 'role': meta.get('role') or 'rep'}, 'docs': docs, 'appkey': AK, **({'reader': RD, 'rtok': rtok} if RD else {})}
     fid = hashlib.sha256(('lt-sales|' + code).encode()).hexdigest()[:20]; fp = os.path.join(out, fid + '.json')
     raw = gzip.compress(json.dumps(pkg, separators=(',', ':')).encode())
     salt, iv = os.urandom(16), os.urandom(12)

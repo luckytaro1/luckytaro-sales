@@ -89,7 +89,7 @@ function loginView(err, code0){ document.getElementById("app").innerHTML = `<div
     catch(x){ loginView(x.message === "code" ? "Username or password is wrong." : x.message === "pw" ? "Username or password is wrong." : x.message === "device" ? `This ${x.nm || "device"} isn't approved yet. Ask the office to approve it, then sign in again.` : "Couldn't open ─ check your connection.", c); } }; }
 // ---------- the desk's own salesperson screens, fed from the unlocked file instead of claude.ai ----------
 function boot(P, lc, lp){ const code = P.meta.code, TK = "lt-team-" + code, SK = "lt-sent-" + code;
-  const docs = { ...P.docs, "settings/team": { members: { U: { code: P.meta.rep, name: P.meta.name, role: "rep" } } } };
+  const docs = { ...P.docs, "settings/team": { members: { U: { code: P.meta.rep, name: P.meta.name, role: P.meta.role || "rep" } } } };
   try { docs["team/U"] = JSON.parse(store.get(TK) || "{}"); } catch(e){ docs["team/U"] = {}; }
   const soInOf = () => (docs["team/U/pkg/meta"] || {}).soIn || []; if (soInOf().length) docs["team/U"].soIn = soInOf();   /* orders read from the pictures they emailed */
   const L = new Map(), clone = d => d == null ? d : JSON.parse(JSON.stringify(d));
