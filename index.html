@@ -164,10 +164,11 @@ function boot(P, lc, lp){ const code = P.meta.code, TK = "lt-team-" + code, SK =
     const out = () => { try { store.del("lt-pw"); store.del("lt-code"); } catch(e){} SESS.end().finally(() => location.replace(location.pathname + "?signedout=1")); };
     const poke = () => { last = Date.now(); SESS.act(); if (bar){ bar.remove(); bar = null; } };
     ["pointerdown", "keydown", "touchstart", "wheel", "scroll"].forEach(ev => window.addEventListener(ev, poke, { capture: true, passive: true }));
-    const tick = () => { const idle = Date.now() - last; if (idle >= IDLE) return out();
+    let here = 0; const beat = () => { const n = Date.now(); if (!document.hidden && n - last < 10 * 60e3 && n - here >= 4 * 60e3){ here = n; act("[here]"); } };   /* "online" on the office desk ─ every 4 minutes while they're using it */
+    const tick = () => { beat(); const idle = Date.now() - last; if (idle >= IDLE) return out();
       if (idle >= IDLE - WARN && !bar){ bar = document.createElement("div"); bar.style.cssText = "position:fixed;left:50%;top:calc(12px + env(safe-area-inset-top));transform:translateX(-50%);z-index:10000;background:#b45309;color:#fff;border-radius:12px;padding:10px 16px;font:600 14px system-ui;box-shadow:0 6px 20px rgba(0,0,0,.35);cursor:pointer";
         bar.textContent = "Signing out in 5 minutes because of no activity ─ tap here to stay signed in"; bar.onclick = poke; document.body.appendChild(bar); } };
-    setInterval(tick, 20000); document.addEventListener("visibilitychange", () => { if (!document.hidden) tick(); }); }
+    setInterval(tick, 20000); document.addEventListener("visibilitychange", () => { if (!document.hidden) tick(); }); setTimeout(beat, 5000); }
   // sales orders go to the office by email (there's no live link back to the desk from here)
   const custName = id => { for (const k in docs){ if (!/\/cust\d+$/.test(k)) continue; const c = (docs[k].list || []).find(x => x.id === id); if (c) return [c.name, c.code]; } return [id, ""]; };
   const pending = () => { let sent = {}; try { sent = JSON.parse(store.get(SK) || "{}"); } catch(e){} return ((docs["team/U"] || {}).soOut || []).filter(so => so && so.uid && sent[so.uid] !== so.at && (so.void ? true : so.cid && (so.lines || []).some(l => Number(l.q) > 0) && !(so.pic && so.picAt && so.at === so.picAt))); };   /* a deleted order goes too, so the office copy is removed */
