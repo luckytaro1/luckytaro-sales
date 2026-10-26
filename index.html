@@ -37,6 +37,10 @@
 .foot{color:var(--mut);font-size:12.5px;text-align:center}
 .mut{color:var(--mut)}.red{color:#a12c2c}.row{display:flex;gap:8px;align-items:center}
 @media (max-width:860px){.lp{grid-template-columns:1fr}.art{padding:30px 20px 28px;gap:12px}.art h1{font-size:32px}.art p.lead{font-size:15px}.feats,.art .kick{display:none}.side{padding:24px 18px 40px;align-items:flex-start}.wrap{gap:14px}.logo{width:150px}}
+#ltLoad{position:fixed;inset:0;z-index:50;display:grid;place-items:center;background:radial-gradient(900px 600px at 0% 0%,rgba(255,255,255,.10),transparent 60%),linear-gradient(160deg,#7b4fa0 0%,#5e3a7e 55%,#3b2154 100%);color:#fff;animation:ldIn .25s ease}
+#ltLoad .ldc{display:flex;flex-direction:column;align-items:center;gap:14px;width:min(320px,80vw);text-align:center}#ltLoad .ldl{width:120px;filter:drop-shadow(0 8px 20px rgba(0,0,0,.25));background:#fff;border-radius:20px;padding:12px}
+#ltLoad b{font-size:22px;font-weight:800}#ltLoad small{color:#e7dcf1;font-size:13.5px}#ltLoad .ldb{width:100%;height:6px;border-radius:99px;background:rgba(255,255,255,.2);overflow:hidden}#ltLoad .ldb i{display:block;height:100%;width:8%;border-radius:99px;background:#c5f07c;transition:width .5s ease}
+@keyframes ldIn{from{opacity:0}to{opacity:1}}
 </style></head><body><div id="app"><p class="mut" style="text-align:center;margin-top:40vh;color:#7a7187">Opening…</p></div>
 <script>
 (() => { "use strict";
@@ -47,6 +51,9 @@ async function liveGet(f){ try { const r = await fetch(`${LIVE}/d/${f}?t=${Date.
       const P = await Promise.all(Array.from({ length: n }, (_, i) => fetch(`${LIVE}/d/${pid}_p${i}?t=${Date.now()}`, { cache: "no-store" }).then(x => x.ok ? x.text() : Promise.reject()))); E = JSON.parse(P.join("")); }
     return E && E.ct ? E : null; } catch(e){ return null; } }
 let NETFAIL = 0;   /* the page couldn't download at all (blocked network / offline) ─ not a wrong username */
+const APPP = fetch("app.json", { cache: "no-cache" }).then(r => r.ok ? r.json() : Promise.reject()).catch(() => null);   /* the screens download while they type */
+const PF = {};   /* their own file, fetched as soon as the username is typed */
+function prefetchFile(code){ code = String(code || "").trim().toUpperCase(); if (code.length < 2) return; sha("lt-sales|" + code).then(h => { const f = h.slice(0, 20); if (PF[f] && Date.now() - PF[f].at < 60000) return; NETFAIL = 0; PF[f] = { at: Date.now(), p: getLocked(f) }; }).catch(() => {}); }
 const ghGet = f => fetch(`/data/${f}.json?t=${Date.now()}`, { cache: "no-store" }).then(r => r.ok ? r.json() : null).catch(() => { NETFAIL++; return null; });
 async function getLocked(f){ const [a, b] = await Promise.all([ghGet(f), liveGet(f)]); if (a && b) return (b.at || 0) >= (a.at || 0) ? b : a; return b || a; }
 const store = { get(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }, set(k, v){ try { localStorage.setItem(k, v); } catch(e){} }, del(k){ try { localStorage.removeItem(k); } catch(e){} } };
@@ -63,13 +70,15 @@ async function devKey(f, quiet){ if (DKC[f] !== undefined) return DKC[f]; let r;
   if (r.status === 403){ let j = {}; try { j = await r.json(); } catch(e){} const x = new Error("device"); x.nm = j.nm || devName(); x.where = j.where || ""; throw x; }
   if (!r.ok){ if (quiet) return ""; throw new Error("net"); } let j = {}; try { j = await r.json(); } catch(e){} return (DKC[f] = String(j.dk || "")); }
 async function unlock(code, pw, E0){ code = code.trim().toUpperCase(); const f = (await sha("lt-sales|" + code)).slice(0, 20);
-  let E = E0; if (!E){ NETFAIL = 0; E = await getLocked(f); if (!E) throw new Error(NETFAIL ? "net" : "code"); }
+  let E = E0; if (!E){ const pf = PF[f]; delete PF[f]; if (pf && Date.now() - pf.at < 60000) E = await pf.p; if (!E){ NETFAIL = 0; E = await getLocked(f); } if (!E) throw new Error(NETFAIL ? "net" : "code"); }
   const dk = E.dk ? await devKey(f) : (E0 ? "" : await devKey(f, true).then(() => "", () => ""));   /* a locked file needs this device's key; otherwise the sign-in is just logged */
   if (E.dk && !dk) throw new Error("device");
   const km = await crypto.subtle.importKey("raw", new TextEncoder().encode(E.dk ? pw + "|" + dk : pw), "PBKDF2", false, ["deriveKey"]);
   const key = await crypto.subtle.deriveKey({ name: "PBKDF2", salt: b64(E.salt), iterations: E.it, hash: "SHA-256" }, km, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
   let raw; try { raw = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b64(E.iv) }, key, b64(E.ct)); } catch(e){ throw new Error("pw"); }
   return JSON.parse(await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream("gzip"))).text()); }
+function loadView(nm, pct){ let el = document.getElementById("ltLoad"); if (!el){ el = document.createElement("div"); el.id = "ltLoad"; el.innerHTML = `<div class="ldc"><img src="logo.png" alt="Lucky Taro" class="ldl"><b id="ltLoadT"></b><div class="ldb"><i id="ltLoadB"></i></div><small id="ltLoadS">Opening your sales desk…</small></div>`; document.body.appendChild(el); }
+  const t = document.getElementById("ltLoadT"), b = document.getElementById("ltLoadB"); if (t) t.textContent = `Welcome, ${String(nm).split(" ")[0]}`; if (b) b.style.width = Math.max(8, Math.min(100, pct || 0)) + "%"; }
 function loginView(err, code0){ document.getElementById("app").innerHTML = `<div class="lp">
   <section class="art"><span class="kick"><i></i>Sales desk</span><h1>Fresh prices. <em>Faster sales.</em></h1>
     <p class="lead">Today's price list, stock and every one of your customers ─ in your pocket, wherever you are.</p>
@@ -85,8 +94,9 @@ function loginView(err, code0){ document.getElementById("app").innerHTML = `<div
     <div class="foot">© Lucky Taro, Inc. · Los Angeles</div></div></section></div>`;
   const pi = document.getElementById("lp"), sb = document.getElementById("lpShow"); sb.onclick = () => { pi.type = pi.type === "password" ? "text" : "password"; sb.textContent = pi.type === "password" ? "Show" : "Hide"; pi.focus(); };
   (document.getElementById("lc").value ? pi : document.getElementById("lc")).focus();
-  document.getElementById("lf").onsubmit = async e => { e.preventDefault(); const c = document.getElementById("lc").value, p = document.getElementById("lp").value; if (!c || !p) return; const sbtn = e.target.querySelector(".btn"); sbtn.textContent = "Opening your desk…"; sbtn.disabled = true;
-    try { const P = await unlock(c, p); boot(P, c, p); }
+  { const lc = document.getElementById("lc"); let t; lc.addEventListener("input", () => { clearTimeout(t); t = setTimeout(() => prefetchFile(lc.value), 350); }); lc.addEventListener("blur", () => prefetchFile(lc.value)); pi.addEventListener("focus", () => prefetchFile(lc.value)); }
+  document.getElementById("lf").onsubmit = async e => { e.preventDefault(); const c = document.getElementById("lc").value, p = document.getElementById("lp").value; if (!c || !p) return; const sbtn = e.target.querySelector(".btn"); sbtn.textContent = "Signing in…"; sbtn.disabled = true;
+    try { const P = await unlock(c, p); loadView(P.meta.name || c, 55); boot(P, c, p); }
     catch(x){ loginView(x.message === "code" ? "We can't find that username ─ check it and try again." : x.message === "pw" ? "Username or password is wrong." : x.message === "device" ? `This ${x.nm || "device"} isn't approved yet. Ask the office to approve it, then sign in again.` : "Couldn't reach the sales desk from this network ─ refresh the page, or try another Wi-Fi / your phone's data.", c); } }; }
 // ---------- the desk's own salesperson screens, fed from the unlocked file instead of claude.ai ----------
 function boot(P, lc, lp){ const code = P.meta.code, TK = "lt-team-" + code, SK = "lt-sent-" + code;
@@ -161,8 +171,8 @@ function boot(P, lc, lp){ const code = P.meta.code, TK = "lt-team-" + code, SK =
       b.innerHTML = `${failN} order${failN === 1 ? "" : "s"} didn't reach the office ─ check your connection <button id="ltSend" style="all:unset;cursor:pointer;background:#fff;color:#b45309;border-radius:8px;padding:6px 10px">↻ Try again</button>`;
       document.getElementById("ltSend").onclick = () => { b.remove(); ordersBar(); }; }, 8000); }
   setTimeout(ordersBar, 4000);   /* anything left from last time goes out now */
-  (async () => { const A = await (await fetch("app.json?t=" + Date.now(), { cache: "no-store" })).json(); const k = await crypto.subtle.importKey("raw", b64(P.appkey), "AES-GCM", false, ["decrypt"]);
-    const raw = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b64(A.iv) }, k, b64(A.ct)); return new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream("gzip"))).text(); })().then(html => { document.open(); document.write(html); document.close(); const st = document.createElement("style"); st.textContent = '#askFab,[data-tmgo="ask"]{display:none!important}'; (document.head || document.body).appendChild(st); document.title = "Lucky Taro, Inc."; [["icon", "favicon.ico?v=2"], ["apple-touch-icon", "apple-touch-icon.png?v=2"]].forEach(([r, h]) => { const l = document.createElement("link"); l.rel = r; l.href = h; (document.head || document.body).appendChild(l); }); setTimeout(ordersBar, 3000); idleWatch(); freshWatch(); }, () => { store.del("lt-pw"); loginView("Couldn't open the screens ─ sign in again."); }); }
+  (async () => { const A = (await APPP) || await (await fetch("app.json?t=" + Date.now(), { cache: "no-store" })).json(); loadView(P.meta.name || lc, 80); const k = await crypto.subtle.importKey("raw", b64(P.appkey), "AES-GCM", false, ["decrypt"]);
+    const raw = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b64(A.iv) }, k, b64(A.ct)); return new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream("gzip"))).text(); })().then(html => { loadView(P.meta.name || lc, 100); document.open(); document.write(html); document.close(); const st = document.createElement("style"); st.textContent = '#askFab,[data-tmgo="ask"]{display:none!important}'; (document.head || document.body).appendChild(st); document.title = "Lucky Taro, Inc."; [["icon", "favicon.ico?v=2"], ["apple-touch-icon", "apple-touch-icon.png?v=2"]].forEach(([r, h]) => { const l = document.createElement("link"); l.rel = r; l.href = h; (document.head || document.body).appendChild(l); }); setTimeout(ordersBar, 3000); idleWatch(); freshWatch(); }, () => { store.del("lt-pw"); loginView("Couldn't open the screens ─ sign in again."); }); }
 if (!window.isSecureContext || !(window.crypto && crypto.subtle)){ document.getElementById("app").innerHTML = `<div class="side" style="min-height:100vh"><div class="login"><h2>🔒 Secure link needed</h2><p>This page must be opened with <b>https://</b> so your password stays private.</p><p><a class="btn" style="display:block;text-align:center;text-decoration:none" href="https://${esc(location.host + location.pathname)}">Open the secure page</a></p><p class="mut">If that doesn't open yet, the office is still switching it on ─ try again later.</p></div></div>`; return; }
 store.del("lt-pw"); store.del("lt-code");   /* nothing kept on the device ─ sign in each time */ { const so = /signedout=1/.test(location.search), pc = /pwchanged=1/.test(location.search); if (so || pc) try { history.replaceState(null, "", location.pathname); } catch(e){} loginView(so ? "Signed out after 2 hours with no activity ─ sign in again." : pc ? "Your password was changed by the office ─ sign in with the new one." : undefined); }
 })();
