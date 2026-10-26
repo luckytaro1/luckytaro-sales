@@ -164,7 +164,8 @@ function boot(P, lc, lp){ const code = P.meta.code, TK = "lt-team-" + code, SK =
     const out = () => { try { store.del("lt-pw"); store.del("lt-code"); } catch(e){} SESS.end().finally(() => location.replace(location.pathname + "?signedout=1")); };
     const poke = () => { last = Date.now(); SESS.act(); if (bar){ bar.remove(); bar = null; } };
     ["pointerdown", "keydown", "touchstart", "wheel", "scroll"].forEach(ev => window.addEventListener(ev, poke, { capture: true, passive: true }));
-    let here = 0; const beat = () => { const n = Date.now(); if (!document.hidden && n - last < 10 * 60e3 && n - here >= 4 * 60e3){ here = n; act("[here]"); } };   /* "online" on the office desk ─ every 4 minutes while they're using it */
+    let here = 0, hScr = ""; const scrNow = () => { try { return String(window.ltScr ? window.ltScr() : "").slice(0, 40); } catch(e){ return ""; } };
+    const beat = () => { const n = Date.now(), sc = scrNow(); if (document.hidden || n - last >= 10 * 60e3) return; if (n - here >= 4 * 60e3 || (sc !== hScr && n - here >= 45e3)){ here = n; hScr = sc; act("[here]" + (sc ? " " + sc : "")); } };   /* "online" + which screen, on the office desk ─ every 4 min, or soon after they change screens */   /* "online" on the office desk ─ every 4 minutes while they're using it */
     const tick = () => { beat(); const idle = Date.now() - last; if (idle >= IDLE) return out();
       if (idle >= IDLE - WARN && !bar){ bar = document.createElement("div"); bar.style.cssText = "position:fixed;left:50%;top:calc(12px + env(safe-area-inset-top));transform:translateX(-50%);z-index:10000;background:#b45309;color:#fff;border-radius:12px;padding:10px 16px;font:600 14px system-ui;box-shadow:0 6px 20px rgba(0,0,0,.35);cursor:pointer";
         bar.textContent = "Signing out in 5 minutes because of no activity ─ tap here to stay signed in"; bar.onclick = poke; document.body.appendChild(bar); } };
