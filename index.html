@@ -58,6 +58,7 @@ const ghGet = f => fetch(`/data/${f}.json?t=${Date.now()}`, { cache: "no-store" 
 async function getLocked(f){ const [a, b] = await Promise.all([ghGet(f), liveGet(f)]); if (a && b) return (b.at || 0) >= (a.at || 0) ? b : a; return b || a; }
 const store = { get(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }, set(k, v){ try { localStorage.setItem(k, v); } catch(e){} }, del(k){ try { localStorage.removeItem(k); } catch(e){} } };
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const SIGNED_OUT = /[?&](out|signedout|pwchanged)\b/.test(location.search);
 if (/[?&]out\b/.test(location.search)){ store.del("lt-pw"); history.replaceState(null, "", location.pathname); }
 // the salesperson's file is locked with their password (AES-256-GCM, key from PBKDF2-SHA256)
 async function sha(s){ const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)); return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, "0")).join(""); }
@@ -69,14 +70,24 @@ const DKC = {};
 async function devKey(f, quiet){ if (DKC[f] !== undefined) return DKC[f]; let r; try { r = await fetch(`${LIVE}/k/${f}`, { method: "POST", headers: { "content-type": "text/plain" }, body: JSON.stringify({ dev: devId(), nm: devName() }) }); } catch(e){ if (quiet) return ""; throw new Error("net"); }
   if (r.status === 403){ let j = {}; try { j = await r.json(); } catch(e){} const x = new Error("device"); x.nm = j.nm || devName(); x.where = j.where || ""; throw x; }
   if (!r.ok){ if (quiet) return ""; throw new Error("net"); } let j = {}; try { j = await r.json(); } catch(e){} return (DKC[f] = String(j.dk || "")); }
-async function unlock(code, pw, E0){ code = code.trim().toUpperCase(); const f = (await sha("lt-sales|" + code)).slice(0, 20);
+let LASTKM = null;
+async function unlock(code, pw, E0, km0){ code = code.trim().toUpperCase(); const f = (await sha("lt-sales|" + code)).slice(0, 20);
   let E = E0; if (!E){ const pf = PF[f]; delete PF[f]; if (pf && Date.now() - pf.at < 60000) E = await pf.p; if (!E){ NETFAIL = 0; E = await getLocked(f); } if (!E) throw new Error(NETFAIL ? "net" : "code"); }
   const dk = E.dk ? await devKey(f) : (E0 ? "" : await devKey(f, true).then(() => "", () => ""));   /* a locked file needs this device's key; otherwise the sign-in is just logged */
   if (E.dk && !dk) throw new Error("device");
-  const km = await crypto.subtle.importKey("raw", new TextEncoder().encode(E.dk ? pw + "|" + dk : pw), "PBKDF2", false, ["deriveKey"]);
+  const km = km0 || await crypto.subtle.importKey("raw", new TextEncoder().encode(E.dk ? pw + "|" + dk : pw), "PBKDF2", false, ["deriveKey"]);
   const key = await crypto.subtle.deriveKey({ name: "PBKDF2", salt: b64(E.salt), iterations: E.it, hash: "SHA-256" }, km, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
-  let raw; try { raw = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b64(E.iv) }, key, b64(E.ct)); } catch(e){ throw new Error("pw"); }
+  let raw; try { raw = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b64(E.iv) }, key, b64(E.ct)); } catch(e){ throw new Error("pw"); } LASTKM = km;
   return JSON.parse(await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream("gzip"))).text()); }
+/* stay signed in on this tab: a refresh doesn't sign you out. The key is kept by the browser and can't be read back out; closing the tab, Sign out, or 2 hours with no activity ends it */
+const SESS = { idb: () => new Promise(ok => { try { const r = indexedDB.open("lt-sess", 1); r.onupgradeneeded = () => r.result.createObjectStore("s"); r.onsuccess = () => ok(r.result); r.onerror = () => ok(null); } catch(e){ ok(null); } }),
+  async put(v){ const db = await SESS.idb(); if (!db) return; let t = null; try { t = sessionStorage.getItem("lt-tok"); } catch(e){} if (!t){ t = Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, "0")).join(""); try { sessionStorage.setItem("lt-tok", t); } catch(e){ return; } }
+    try { const tx = db.transaction("s", "readwrite"), st = tx.objectStore("s"); st.put({ ...v, at: Date.now() }, t); const q = st.openCursor(); q.onsuccess = () => { const c = q.result; if (!c) return; if (c.key !== t && Date.now() - ((c.value || {}).at || 0) > 12 * 3600e3) c.delete(); c.continue(); }; } catch(e){} },
+  async get(){ let t = null; try { t = sessionStorage.getItem("lt-tok"); } catch(e){} if (!t) return null; const db = await SESS.idb(); if (!db) return null; return new Promise(ok => { try { const q = db.transaction("s").objectStore("s").get(t); q.onsuccess = () => ok(q.result || null); q.onerror = () => ok(null); } catch(e){ ok(null); } }); },
+  async end(){ let t = null; try { t = sessionStorage.getItem("lt-tok"); sessionStorage.removeItem("lt-tok"); sessionStorage.removeItem("lt-act"); } catch(e){} const db = await SESS.idb(); if (db && t) try { db.transaction("s", "readwrite").objectStore("s").delete(t); } catch(e){} },
+  act(){ try { const n = Date.now(), o = +sessionStorage.getItem("lt-act") || 0; if (n - o > 30000) sessionStorage.setItem("lt-act", String(n)); } catch(e){} } };
+async function resume(){ const v = await SESS.get(); if (!v || !v.km || !v.code) return false; let a = 0; try { a = +sessionStorage.getItem("lt-act") || 0; } catch(e){} if (a && Date.now() - a > 2 * 3600e3){ await SESS.end(); return false; }
+  loadView(v.name || v.code, 25); try { const P = await unlock(v.code, null, null, v.km); loadView(P.meta.name || v.code, 55); boot(P, v.code, null); return true; } catch(e){ await SESS.end(); const el = document.getElementById("ltLoad"); if (el) el.remove(); return false; } }
 function loadView(nm, pct){ let el = document.getElementById("ltLoad"); if (!el){ el = document.createElement("div"); el.id = "ltLoad"; el.innerHTML = `<div class="ldc"><img src="logo.png" alt="Lucky Taro" class="ldl"><b id="ltLoadT"></b><div class="ldb"><i id="ltLoadB"></i></div><small id="ltLoadS">Opening your sales desk…</small></div>`; document.body.appendChild(el); }
   const t = document.getElementById("ltLoadT"), b = document.getElementById("ltLoadB"); if (t) t.textContent = `Welcome, ${String(nm).split(" ")[0]}`; if (b) b.style.width = Math.max(8, Math.min(100, pct || 0)) + "%"; }
 function loginView(err, code0){ document.getElementById("app").innerHTML = `<div class="lp">
@@ -96,7 +107,7 @@ function loginView(err, code0){ document.getElementById("app").innerHTML = `<div
   (document.getElementById("lc").value ? pi : document.getElementById("lc")).focus();
   { const lc = document.getElementById("lc"); let t; lc.addEventListener("input", () => { clearTimeout(t); t = setTimeout(() => prefetchFile(lc.value), 350); }); lc.addEventListener("blur", () => prefetchFile(lc.value)); pi.addEventListener("focus", () => prefetchFile(lc.value)); }
   document.getElementById("lf").onsubmit = async e => { e.preventDefault(); const c = document.getElementById("lc").value, p = document.getElementById("lp").value; if (!c || !p) return; const sbtn = e.target.querySelector(".btn"); sbtn.textContent = "Signing in…"; sbtn.disabled = true;
-    try { const P = await unlock(c, p); loadView(P.meta.name || c, 55); boot(P, c, p); }
+    try { const P = await unlock(c, p); SESS.put({ km: LASTKM, code: c.trim().toUpperCase(), name: P.meta.name || "" }).catch(() => {}); SESS.act(); loadView(P.meta.name || c, 55); boot(P, c, p); }
     catch(x){ loginView(x.message === "code" ? "We can't find that username ─ check it and try again." : x.message === "pw" ? "Username or password is wrong." : x.message === "device" ? `This ${x.nm || "device"} isn't approved yet. Ask the office to approve it, then sign in again.` : "Couldn't reach the sales desk from this network ─ refresh the page, or try another Wi-Fi / your phone's data.", c); } }; }
 // ---------- the desk's own salesperson screens, fed from the unlocked file instead of claude.ai ----------
 function boot(P, lc, lp){ const code = P.meta.code, TK = "lt-team-" + code, SK = "lt-sent-" + code;
@@ -135,7 +146,7 @@ function boot(P, lc, lp){ const code = P.meta.code, TK = "lt-team-" + code, SK =
       if (h && h.w && h.w !== lastW){ E = await liveGet(f); if (E) lastW = h.w; } else if (!h) E = await liveGet(f);   /* an older link without the quick check */
       if (Date.now() - ghAt > 5 * 60000){ ghAt = Date.now(); const G = await ghGet(f); if (G && (!E || (G.at || 0) > (E.at || 0))) E = G; }
       if (!E || !E.at || E.at <= lastAt) return;
-      let N; try { N = await unlock(lc, lp, E); } catch(x){ if (x && x.message === "pw"){ store.del("lt-pw"); location.replace(location.pathname + "?pwchanged=1"); } return; }   /* the office changed the password: sign in again */ lastAt = E.at; Object.keys(docs).filter(k => k.startsWith("team/U/pkg/")).forEach(k => delete docs[k]); Object.assign(docs, N.docs);
+      let N; try { N = await unlock(lc, lp, E, LASTKM); } catch(x){ if (x && x.message === "pw"){ store.del("lt-pw"); SESS.end(); location.replace(location.pathname + "?pwchanged=1"); } return; }   /* the office changed the password: sign in again */ lastAt = E.at; Object.keys(docs).filter(k => k.startsWith("team/U/pkg/")).forEach(k => delete docs[k]); Object.assign(docs, N.docs);
       const si = soInOf(); if (si.length){ docs["team/U"] = { ...(docs["team/U"] || {}), soIn: si }; store.set(TK, JSON.stringify(docs["team/U"])); notify("team/U"); }
       notify("team/U/pkg/meta"); } catch(e){} };
   const freshWatch = () => { act("Signed in");
@@ -150,8 +161,8 @@ function boot(P, lc, lp){ const code = P.meta.code, TK = "lt-team-" + code, SK =
     if (r.status === 401) throw { code: "signin" }; if (r.status === 429) throw { code: "rate_limited" }; if (!r.ok) throw { code: "failed" }; return r.json(); }; window.claude = { use: async n => n === "db" ? db : n === "user" ? user : n === "downloads" ? downloads : null };
   // signed out after 2 hours with no taps, clicks, typing or scrolling (5 minutes' warning first) ─ the next person must sign in again
   function idleWatch(){ const IDLE = 2 * 3600e3, WARN = 5 * 60e3; let last = Date.now(), bar = null;
-    const out = () => { try { store.del("lt-pw"); store.del("lt-code"); } catch(e){} location.replace(location.pathname + "?signedout=1"); };
-    const poke = () => { last = Date.now(); if (bar){ bar.remove(); bar = null; } };
+    const out = () => { try { store.del("lt-pw"); store.del("lt-code"); } catch(e){} SESS.end().finally(() => location.replace(location.pathname + "?signedout=1")); };
+    const poke = () => { last = Date.now(); SESS.act(); if (bar){ bar.remove(); bar = null; } };
     ["pointerdown", "keydown", "touchstart", "wheel", "scroll"].forEach(ev => window.addEventListener(ev, poke, { capture: true, passive: true }));
     const tick = () => { const idle = Date.now() - last; if (idle >= IDLE) return out();
       if (idle >= IDLE - WARN && !bar){ bar = document.createElement("div"); bar.style.cssText = "position:fixed;left:50%;top:calc(12px + env(safe-area-inset-top));transform:translateX(-50%);z-index:10000;background:#b45309;color:#fff;border-radius:12px;padding:10px 16px;font:600 14px system-ui;box-shadow:0 6px 20px rgba(0,0,0,.35);cursor:pointer";
@@ -174,6 +185,6 @@ function boot(P, lc, lp){ const code = P.meta.code, TK = "lt-team-" + code, SK =
   (async () => { const A = (await APPP) || await (await fetch("app.json?t=" + Date.now(), { cache: "no-store" })).json(); loadView(P.meta.name || lc, 80); const k = await crypto.subtle.importKey("raw", b64(P.appkey), "AES-GCM", false, ["decrypt"]);
     const raw = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b64(A.iv) }, k, b64(A.ct)); return new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream("gzip"))).text(); })().then(html => { loadView(P.meta.name || lc, 100); document.open(); document.write(html); document.close(); const st = document.createElement("style"); st.textContent = '#askFab,[data-tmgo="ask"]{display:none!important}'; (document.head || document.body).appendChild(st); document.title = "Lucky Taro, Inc."; [["icon", "favicon.ico?v=2"], ["apple-touch-icon", "apple-touch-icon.png?v=2"]].forEach(([r, h]) => { const l = document.createElement("link"); l.rel = r; l.href = h; (document.head || document.body).appendChild(l); }); setTimeout(ordersBar, 3000); idleWatch(); freshWatch(); }, () => { store.del("lt-pw"); loginView("Couldn't open the screens ─ sign in again."); }); }
 if (!window.isSecureContext || !(window.crypto && crypto.subtle)){ document.getElementById("app").innerHTML = `<div class="side" style="min-height:100vh"><div class="login"><h2>🔒 Secure link needed</h2><p>This page must be opened with <b>https://</b> so your password stays private.</p><p><a class="btn" style="display:block;text-align:center;text-decoration:none" href="https://${esc(location.host + location.pathname)}">Open the secure page</a></p><p class="mut">If that doesn't open yet, the office is still switching it on ─ try again later.</p></div></div>`; return; }
-store.del("lt-pw"); store.del("lt-code");   /* nothing kept on the device ─ sign in each time */ { const so = /signedout=1/.test(location.search), pc = /pwchanged=1/.test(location.search); if (so || pc) try { history.replaceState(null, "", location.pathname); } catch(e){} loginView(so ? "Signed out after 2 hours with no activity ─ sign in again." : pc ? "Your password was changed by the office ─ sign in with the new one." : undefined); }
+store.del("lt-pw"); store.del("lt-code");   /* no password is ever kept ─ only this tab's locked key (see SESS) */ if (SIGNED_OUT) SESS.end(); (SIGNED_OUT ? Promise.resolve(false) : resume()).then(ok => { if (ok) return; const so = /signedout=1/.test(location.search), pc = /pwchanged=1/.test(location.search); if (so || pc) try { history.replaceState(null, "", location.pathname); } catch(e){} loginView(so ? "Signed out after 2 hours with no activity ─ sign in again." : pc ? "Your password was changed by the office ─ sign in with the new one." : undefined); });
 })();
 </script></body></html>
