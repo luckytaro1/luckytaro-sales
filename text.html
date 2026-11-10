@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
+<title>Lucky Taro ─ text message</title>
+<style>
+:root{color-scheme:light dark}body{margin:0;font:16px -apple-system,"Segoe UI",Roboto,sans-serif;background:#f6f3fa;color:#1f1a2e;display:flex;min-height:100vh;align-items:center;justify-content:center}
+@media(prefers-color-scheme:dark){body{background:#1e2638;color:#e5e7eb}}
+.b{max-width:420px;padding:24px 16px;text-align:center}a.k{display:block;margin:16px 0 8px;padding:14px;border-radius:12px;background:#5b3f8f;color:#fff;text-decoration:none;font-weight:700}small{opacity:.7}
+</style></head><body><div class="b"><b>Opening your Messages app…</b><a class="k" id="go" href="#">💬 Open Messages</a><small id="to"></small><br><small>Paste the photo in the message (long-press → Paste, or Ctrl+V), then send.</small></div>
+<script>
+/* Lucky Taro desk: a text-message link the desk page can't open itself (custom links are blocked inside it). Only ever opens sms: ─ never another website. */
+(() => { const q = new URLSearchParams(location.search), d = String(q.get("to") || "").replace(/\D/g, "").slice(0, 15), n = d.length === 10 ? "+1" + d : d ? "+" + d : "", body = String(q.get("b") || "").slice(0, 500);
+  const href = `sms:${n}?&body=${encodeURIComponent(body)}`; document.getElementById("go").href = href; document.getElementById("to").textContent = n ? "To " + n : "";
+  setTimeout(() => { location.href = href; }, 150); })();
+</script></body></html>
