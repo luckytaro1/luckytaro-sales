@@ -47,7 +47,7 @@
 const ORDER_EMAIL = "purchase@luckytaro.com", LIVE = "https://lt-live.purchase-3d8.workers.dev";
 // the newest locked file: straight from the office desk (Cloudflare link) when it's there and newer, else the copy on this site
 async function liveGet(f){ try { const r = await fetch(`${LIVE}/d/${f}?t=${Date.now()}`, { cache: "no-store" }); if (!r.ok) return null; let E = await r.json();
-    if (E && E.parts){ const n = Math.min(Number(E.parts) || 0, 40), pid = String(E.pid || f).replace(/[^A-Za-z0-9_-]/g, ""); if (!n) return null;
+    if (E && E.parts){ const n = Math.min(Number(E.parts) || 0, 120), pid = String(E.pid || f).replace(/[^A-Za-z0-9_-]/g, ""); if (!n) return null;
       const P = await Promise.all(Array.from({ length: n }, (_, i) => fetch(`${LIVE}/d/${pid}_p${i}?t=${Date.now()}`, { cache: "no-store" }).then(x => x.ok ? x.text() : Promise.reject()))); E = JSON.parse(P.join("")); }
     return E && E.ct ? E : null; } catch(e){ return null; } }
 let NETFAIL = 0;   /* the page couldn't download at all (blocked network / offline) ─ not a wrong username */
